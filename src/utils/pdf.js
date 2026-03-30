@@ -1,11 +1,30 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-export function exportCaseToPdf(item) {
-  const doc = new jsPDF();
+async function loadFont(doc) {
+  const res = await fetch("/fonts/NotoSansKR-Regular.ttf");
+  const fontBuffer = await res.arrayBuffer();
 
+  let binary = "";
+  const bytes = new Uint8Array(fontBuffer);
+  const len = bytes.byteLength;
+
+  for (let i = 0; i < len; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+
+  doc.addFileToVFS("NotoSansKR-Regular.ttf", binary);
+  doc.addFont("NotoSansKR-Regular.ttf", "NotoSansKR", "normal");
+  doc.setFont("NotoSansKR");
+}
+
+export async function exportCaseToPdf(item) {
+  const doc = new jsPDF();
+  await loadFont(doc);
+
+  doc.setFont("NotoSansKR", "normal");
   doc.setFontSize(18);
-  doc.text("Yours Asset Portal Report", 14, 18);
+  doc.text("유어즈에셋 상담 리포트", 14, 18);
 
   doc.setFontSize(10);
   doc.text(`생성일시: ${new Date().toLocaleString("ko-KR")}`, 14, 26);
@@ -25,12 +44,20 @@ export function exportCaseToPdf(item) {
       ["상담메모", item.memo || "-"],
     ],
     styles: {
+      font: "NotoSansKR",
+      fontStyle: "normal",
       fontSize: 10,
       cellPadding: 4,
       overflow: "linebreak",
     },
     headStyles: {
+      font: "NotoSansKR",
+      fontStyle: "normal",
       fillColor: [25, 54, 93],
+    },
+    bodyStyles: {
+      font: "NotoSansKR",
+      fontStyle: "normal",
     },
   });
 
