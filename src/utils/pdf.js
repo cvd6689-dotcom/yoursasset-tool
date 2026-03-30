@@ -1,26 +1,42 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-async function loadFont(doc) {
-  const res = await fetch("/fonts/NotoSansKR-Regular.ttf");
-  const fontBuffer = await res.arrayBuffer();
-
+function arrayBufferToBinaryString(buffer) {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
   let binary = "";
-  const bytes = new Uint8Array(fontBuffer);
-  const len = bytes.byteLength;
 
-  for (let i = 0; i < len; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk);
   }
 
-  doc.addFileToVFS("NotoSansKR-Regular.ttf", binary);
+  return binary;
+}
+
+async function registerKoreanFont(doc) {
+  const response = await fetch("/fonts/NotoSansKR-Regular.ttf");
+
+  if (!response.ok) {
+    throw new Error("폰트 파일을 찾을 수 없습니다.");
+  }
+
+  const fontBuffer = await response.arrayBuffer();
+  const fontBinary = arrayBufferToBinaryString(fontBuffer);
+
+  doc.addFileToVFS("NotoSansKR-Regular.ttf", fontBinary);
   doc.addFont("NotoSansKR-Regular.ttf", "NotoSansKR", "normal");
-  doc.setFont("NotoSansKR");
+  doc.setFont("NotoSansKR", "normal");
 }
 
 export async function exportCaseToPdf(item) {
-  const doc = new jsPDF();
-  await loadFont(doc);
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+
+  await registerKoreanFont(doc);
 
   doc.setFont("NotoSansKR", "normal");
   doc.setFontSize(18);
@@ -31,6 +47,7 @@ export async function exportCaseToPdf(item) {
 
   autoTable(doc, {
     startY: 34,
+    theme: "grid",
     head: [["항목", "내용"]],
     body: [
       ["고객명", item.customerName || "-"],
@@ -47,17 +64,25 @@ export async function exportCaseToPdf(item) {
       font: "NotoSansKR",
       fontStyle: "normal",
       fontSize: 10,
-      cellPadding: 4,
+      cellPadding: 3,
       overflow: "linebreak",
+      halign: "left",
+      valign: "middle",
     },
     headStyles: {
       font: "NotoSansKR",
       fontStyle: "normal",
       fillColor: [25, 54, 93],
+      textColor: 255,
     },
     bodyStyles: {
       font: "NotoSansKR",
       fontStyle: "normal",
+      textColor: 20,
+    },
+    columnStyles: {
+      0: { cellWidth: 35 },
+      1: { cellWidth: 145 },
     },
   });
 
