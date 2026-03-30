@@ -123,6 +123,17 @@ export default function App() {
     }
   }
 
+  async function handlePdfExport(item) {
+    try {
+      setMessage("PDF 생성 중...");
+      await exportCaseToPdf(item);
+      setMessage("PDF 저장 완료");
+    } catch (error) {
+      console.error(error);
+      setMessage("PDF 저장 실패");
+    }
+  }
+
   const mergedCases = useMemo(() => {
     const all = [...localCases, ...firebaseCases];
     const q = keyword.trim().toLowerCase();
@@ -157,10 +168,18 @@ export default function App() {
 
         <div className="nav-card">
           <h3>빠른 메뉴</h3>
-          <button className="ghost-btn" type="button">보장분석</button>
-          <button className="ghost-btn" type="button">상품비교</button>
-          <button className="ghost-btn" type="button">상담저장</button>
-          <button className="ghost-btn" type="button">PDF 출력</button>
+          <button className="ghost-btn" type="button">
+            보장분석
+          </button>
+          <button className="ghost-btn" type="button">
+            상품비교
+          </button>
+          <button className="ghost-btn" type="button">
+            상담저장
+          </button>
+          <button className="ghost-btn" type="button">
+            PDF 출력
+          </button>
         </div>
 
         <div className="stats-card">
@@ -194,7 +213,7 @@ export default function App() {
             <button className="secondary-btn" type="button" onClick={handleFirebaseSave}>
               Firebase 저장
             </button>
-            <button className="dark-btn" type="button" onClick={() => exportCaseToPdf(form)}>
+            <button className="dark-btn" type="button" onClick={() => handlePdfExport(form)}>
               PDF 출력
             </button>
           </div>
@@ -382,7 +401,8 @@ export default function App() {
                       <div className="case-badge">{item.source}</div>
                       <h4>{item.customerName || "이름없음"}</h4>
                       <p>
-                        {item.consultType || "-"} · {item.company || "-"} · {item.product || "-"}
+                        {item.consultType || "-"} · {item.company || "-"} ·{" "}
+                        {item.product || "-"}
                       </p>
                     </div>
 
@@ -393,7 +413,7 @@ export default function App() {
                       <button
                         className="mini-btn"
                         type="button"
-                        onClick={() => exportCaseToPdf(item)}
+                        onClick={() => handlePdfExport(item)}
                       >
                         PDF
                       </button>
