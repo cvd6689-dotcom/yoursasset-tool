@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import insurers from "./data/insurers";
 import products from "./data/products";
 
-const STORAGE_KEY = "yoursasset_consulting_portal_v3";
+const STORAGE_KEY = "yoursasset_consulting_portal_v4";
 
 const initialForm = {
   customerName: "",
@@ -15,6 +15,14 @@ const initialForm = {
   purpose: "보장분석",
   interests: [],
   memo: "",
+
+  existingInsurance: "있음",
+  existingCancer: "없음",
+  existingBrain: "없음",
+  existingHeart: "없음",
+  existingSurgery: "없음",
+  existingDriver: "없음",
+  existingDeath: "없음",
 };
 
 const interestOptions = [
@@ -124,17 +132,34 @@ function App() {
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
 
+    const lackingFields = [];
+
+    if (form.existingInsurance === "없음") {
+      lackingFields.push("전체 보장 점검 필요");
+    }
+
+    if (form.existingCancer === "없음") lackingFields.push("암 진단비");
+    if (form.existingBrain === "없음") lackingFields.push("뇌혈관 진단비");
+    if (form.existingHeart === "없음") lackingFields.push("심장질환 진단비");
+    if (form.existingSurgery === "없음") lackingFields.push("수술비");
+    if (form.driving === "예" && form.existingDriver === "없음") {
+      lackingFields.push("운전자 비용보장");
+    }
+    if (form.married === "기혼" || form.hasChildren === "있음") {
+      if (form.existingDeath === "없음") lackingFields.push("가족책임/사망보장");
+    }
+
     const counselingPoints = [
       `${form.customerName || "고객"} 고객은 ${form.purpose} 중심 상담이 우선입니다.`,
       form.driving === "예"
-        ? "운전 여부가 있으므로 운전자 비용보장 비교 설명이 필요합니다."
-        : "운전 여부가 없으므로 건강/가족보장 중심 상담이 적합합니다.",
+        ? "운전 여부가 있으므로 운전자보험 필요성을 함께 점검해야 합니다."
+        : "운전 여부가 없으므로 건강보장과 가족보장 중심 설명이 적합합니다.",
       form.hasChildren === "있음"
-        ? "자녀 보장과 부모 보장을 연결해 교차 상담하는 흐름이 좋습니다."
-        : "개인 중심 핵심보장과 유지여력 점검이 우선입니다.",
-      form.married === "기혼"
-        ? "가족 책임과 생활비 공백 관점으로 설명하면 설득력이 높습니다."
-        : "현재 소득 대비 꼭 필요한 담보부터 우선 제안하는 것이 적합합니다.",
+        ? "자녀 보장과 부모 보장을 연결한 상담 흐름이 좋습니다."
+        : "개인 유지여력과 핵심담보 위주 상담이 적합합니다.",
+      lackingFields.length > 0
+        ? `현재 부족 가능성이 높은 담보는 ${lackingFields.join(", ")} 입니다.`
+        : "현재 입력 기준으로는 핵심 담보가 일부 준비된 상태로 보입니다.",
     ];
 
     let planSummary = "입력값을 기준으로 추천 설계안이 생성됩니다.";
@@ -144,12 +169,23 @@ function App() {
       } 포함 ${topInsurers.length}개 원수사 비교가 적합합니다.`;
     }
 
+    let salesScript = "";
+    if (lackingFields.length > 0) {
+      salesScript = `${form.customerName || "고객"}님은 현재 ${
+        lackingFields.join(", ")
+      } 부분이 상대적으로 비어 있을 가능성이 있어서, 이번 상담에서는 무조건 많이 넣는 방향보다 꼭 필요한 핵심 담보부터 우선적으로 점검드리는 게 좋겠습니다.`;
+    } else {
+      salesScript = `${form.customerName || "고객"}님은 현재 기본 보장이 어느 정도 준비된 것으로 보여서, 이번 상담에서는 중복 여부와 유지 효율을 중심으로 정리해드리면 좋겠습니다.`;
+    }
+
     return {
       topProducts,
       mainProduct,
       topInsurers,
       counselingPoints,
       planSummary,
+      lackingFields,
+      salesScript,
     };
   }, [form]);
 
@@ -169,7 +205,7 @@ function App() {
           <img src="/logo.png" alt="유어즈에셋 로고" className="brand-logo" />
           <div>
             <h1>유어즈에셋 설계사 포털</h1>
-            <p>고객 입력형 추천 · 원수사 비교실 · PDF 저장</p>
+            <p>고객 입력형 추천 · 원수사 비교실 · 부족 담보 분석 · PDF 저장</p>
           </div>
         </div>
 
@@ -276,6 +312,79 @@ function App() {
           </div>
 
           <div className="field-block">
+            <label>기존 계약 유무</label>
+            <select
+              value={form.existingInsurance}
+              onChange={(e) => handleChange("existingInsurance", e.target.value)}
+            >
+              <option>있음</option>
+              <option>없음</option>
+            </select>
+          </div>
+
+          <div className="sub-grid">
+            <Field label="암 진단비">
+              <select
+                value={form.existingCancer}
+                onChange={(e) => handleChange("existingCancer", e.target.value)}
+              >
+                <option>있음</option>
+                <option>없음</option>
+              </select>
+            </Field>
+
+            <Field label="뇌혈관 진단비">
+              <select
+                value={form.existingBrain}
+                onChange={(e) => handleChange("existingBrain", e.target.value)}
+              >
+                <option>있음</option>
+                <option>없음</option>
+              </select>
+            </Field>
+
+            <Field label="심장질환 진단비">
+              <select
+                value={form.existingHeart}
+                onChange={(e) => handleChange("existingHeart", e.target.value)}
+              >
+                <option>있음</option>
+                <option>없음</option>
+              </select>
+            </Field>
+
+            <Field label="수술비">
+              <select
+                value={form.existingSurgery}
+                onChange={(e) => handleChange("existingSurgery", e.target.value)}
+              >
+                <option>있음</option>
+                <option>없음</option>
+              </select>
+            </Field>
+
+            <Field label="운전자 보장">
+              <select
+                value={form.existingDriver}
+                onChange={(e) => handleChange("existingDriver", e.target.value)}
+              >
+                <option>있음</option>
+                <option>없음</option>
+              </select>
+            </Field>
+
+            <Field label="사망/가족책임 보장">
+              <select
+                value={form.existingDeath}
+                onChange={(e) => handleChange("existingDeath", e.target.value)}
+              >
+                <option>있음</option>
+                <option>없음</option>
+              </select>
+            </Field>
+          </div>
+
+          <div className="field-block">
             <label>상담 메모</label>
             <textarea
               value={form.memo}
@@ -302,6 +411,21 @@ function App() {
           <div className="section-block">
             <h3>추천 설계안 요약</h3>
             <div className="plan-box">{recommendation.planSummary}</div>
+          </div>
+
+          <div className="section-block">
+            <h3>부족 담보 자동 분석</h3>
+            <div className="lack-wrap">
+              {recommendation.lackingFields.length > 0 ? (
+                recommendation.lackingFields.map((item) => (
+                  <span className="lack-badge" key={item}>
+                    {item}
+                  </span>
+                ))
+              ) : (
+                <div className="empty-box">현재 입력 기준 부족 담보가 크게 보이지 않습니다.</div>
+              )}
+            </div>
           </div>
 
           <div className="section-block">
@@ -400,6 +524,11 @@ function App() {
                 </div>
               ))}
             </div>
+          </div>
+
+          <div className="section-block">
+            <h3>자동 상담 멘트</h3>
+            <div className="script-box">{recommendation.salesScript}</div>
           </div>
 
           <div className="section-block">
@@ -513,7 +642,7 @@ function App() {
           color: #103b66;
         }
 
-        .grid-2 {
+        .grid-2, .sub-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 14px;
@@ -608,7 +737,8 @@ function App() {
         }
 
         .plan-box,
-        .memo-box {
+        .memo-box,
+        .script-box {
           border: 1px solid #dbe7f3;
           background: #f8fbff;
           border-radius: 14px;
@@ -617,6 +747,22 @@ function App() {
           line-height: 1.7;
           color: #334155;
           white-space: pre-wrap;
+        }
+
+        .lack-wrap {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+
+        .lack-badge {
+          padding: 10px 14px;
+          background: #fff1f2;
+          color: #be123c;
+          border-radius: 999px;
+          font-size: 13px;
+          font-weight: 800;
+          border: 1px solid #fecdd3;
         }
 
         .recommend-list {
@@ -782,7 +928,7 @@ function App() {
             align-items: flex-start;
           }
 
-          .grid-2 {
+          .grid-2, .sub-grid {
             grid-template-columns: 1fr;
           }
 
