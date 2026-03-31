@@ -32,13 +32,25 @@ function App() {
     saveData({ form });
   }, [form]);
 
-  const categoryOptions = useMemo(() => {
-    const set = new Set(PRODUCT_MASTER.map((item) => item.category));
-    return ["all", ...Array.from(set)];
+  const activeInsurers = useMemo(() => {
+    return INSURER_MASTER.filter((item) => item.useYn).sort(
+      (a, b) => a.order - b.order
+    );
   }, []);
 
+  const activeProducts = useMemo(() => {
+    return PRODUCT_MASTER.filter((item) => item.useYn).sort(
+      (a, b) => a.order - b.order
+    );
+  }, []);
+
+  const categoryOptions = useMemo(() => {
+    const set = new Set(activeProducts.map((item) => item.category));
+    return ["all", ...Array.from(set)];
+  }, [activeProducts]);
+
   const filteredProducts = useMemo(() => {
-    return PRODUCT_MASTER.filter((product) => {
+    return activeProducts.filter((product) => {
       const insurerMatch =
         form.selectedInsurer === "all" ||
         product.insurerId === form.selectedInsurer;
@@ -64,16 +76,18 @@ function App() {
 
       return insurerMatch && categoryMatch && keywordMatch;
     });
-  }, [form]);
+  }, [activeProducts, form]);
 
   const insurerCards = useMemo(() => {
-    return INSURER_MASTER.map((insurer) => ({
-      ...insurer,
-      products: filteredProducts.filter(
-        (product) => product.insurerId === insurer.id
-      ),
-    })).filter((insurer) => insurer.products.length > 0);
-  }, [filteredProducts]);
+    return activeInsurers
+      .map((insurer) => ({
+        ...insurer,
+        products: filteredProducts.filter(
+          (product) => product.insurerId === insurer.id
+        ),
+      }))
+      .filter((insurer) => insurer.products.length > 0);
+  }, [activeInsurers, filteredProducts]);
 
   const handleChange = (key, value) => {
     setForm((prev) => ({
@@ -173,7 +187,7 @@ function App() {
                 }
               >
                 <option value="all">전체 원수사</option>
-                {INSURER_MASTER.map((insurer) => (
+                {activeInsurers.map((insurer) => (
                   <option key={insurer.id} value={insurer.id}>
                     {insurer.name}
                   </option>
