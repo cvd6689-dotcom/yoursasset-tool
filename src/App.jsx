@@ -306,9 +306,12 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div>
-          <h1>유어즈에셋 설계사 포털</h1>
-          <p>실무형 B형 포털 · 상담관리 · 비교실 · 리드관리 · 업무메모</p>
+        <div className="brand-block">
+          <img src="/logo.png" alt="유어즈에셋 로고" className="brand-logo" />
+          <div>
+            <h1>유어즈에셋 설계사 포털</h1>
+            <p>실무형 B형 포털 · 상담관리 · 비교실 · 리드관리 · 업무메모</p>
+          </div>
         </div>
 
         <div className="topbar-actions">
