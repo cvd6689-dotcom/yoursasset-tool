@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import insurers from "./data/insurers";
 import products from "./data/products";
 
-const STORAGE_KEY = "yoursasset_consulting_portal_v4";
+const STORAGE_KEY = "yoursasset_consulting_portal_v5";
 
 const initialForm = {
   customerName: "",
@@ -23,6 +23,8 @@ const initialForm = {
   existingSurgery: "없음",
   existingDriver: "없음",
   existingDeath: "없음",
+
+  monthlyBudget: "",
 };
 
 const interestOptions = [
@@ -78,6 +80,7 @@ function App() {
 
   const recommendation = useMemo(() => {
     const ageNum = Number(form.age || 0);
+    const budgetNum = Number(form.monthlyBudget || 0);
 
     const scoredProducts = products
       .map((product) => {
@@ -132,22 +135,82 @@ function App() {
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
 
-    const lackingFields = [];
+    const lackingItems = [];
 
     if (form.existingInsurance === "없음") {
-      lackingFields.push("전체 보장 점검 필요");
+      lackingItems.push({
+        name: "전체 보장 점검 필요",
+        priority: 100,
+        estimatedCost: 0,
+      });
     }
 
-    if (form.existingCancer === "없음") lackingFields.push("암 진단비");
-    if (form.existingBrain === "없음") lackingFields.push("뇌혈관 진단비");
-    if (form.existingHeart === "없음") lackingFields.push("심장질환 진단비");
-    if (form.existingSurgery === "없음") lackingFields.push("수술비");
+    if (form.existingCancer === "없음") {
+      lackingItems.push({
+        name: "암 진단비",
+        priority: 95,
+        estimatedCost: 30000,
+      });
+    }
+
+    if (form.existingBrain === "없음") {
+      lackingItems.push({
+        name: "뇌혈관 진단비",
+        priority: 90,
+        estimatedCost: 25000,
+      });
+    }
+
+    if (form.existingHeart === "없음") {
+      lackingItems.push({
+        name: "심장질환 진단비",
+        priority: 88,
+        estimatedCost: 25000,
+      });
+    }
+
+    if (form.existingSurgery === "없음") {
+      lackingItems.push({
+        name: "수술비",
+        priority: 75,
+        estimatedCost: 15000,
+      });
+    }
+
     if (form.driving === "예" && form.existingDriver === "없음") {
-      lackingFields.push("운전자 비용보장");
+      lackingItems.push({
+        name: "운전자 비용보장",
+        priority: 82,
+        estimatedCost: 12000,
+      });
     }
-    if (form.married === "기혼" || form.hasChildren === "있음") {
-      if (form.existingDeath === "없음") lackingFields.push("가족책임/사망보장");
+
+    if ((form.married === "기혼" || form.hasChildren === "있음") && form.existingDeath === "없음") {
+      lackingItems.push({
+        name: "가족책임/사망보장",
+        priority: 80,
+        estimatedCost: 20000,
+      });
     }
+
+    const sortedLackingItems = [...lackingItems].sort((a, b) => b.priority - a.priority);
+
+    let recommendedByBudget = [];
+    let usedBudget = 0;
+
+    if (budgetNum > 0) {
+      for (const item of sortedLackingItems) {
+        if (item.estimatedCost === 0) continue;
+        if (usedBudget + item.estimatedCost <= budgetNum) {
+          recommendedByBudget.push(item);
+          usedBudget += item.estimatedCost;
+        }
+      }
+    }
+
+    const excludedByBudget = sortedLackingItems.filter(
+      (item) => !recommendedByBudget.some((picked) => picked.name === item.name)
+    );
 
     const counselingPoints = [
       `${form.customerName || "고객"} 고객은 ${form.purpose} 중심 상담이 우선입니다.`,
@@ -157,8 +220,10 @@ function App() {
       form.hasChildren === "있음"
         ? "자녀 보장과 부모 보장을 연결한 상담 흐름이 좋습니다."
         : "개인 유지여력과 핵심담보 위주 상담이 적합합니다.",
-      lackingFields.length > 0
-        ? `현재 부족 가능성이 높은 담보는 ${lackingFields.join(", ")} 입니다.`
+      sortedLackingItems.length > 0
+        ? `현재 부족 가능성이 높은 담보는 ${sortedLackingItems
+            .map((item) => item.name)
+            .join(", ")} 입니다.`
         : "현재 입력 기준으로는 핵심 담보가 일부 준비된 상태로 보입니다.",
     ];
 
@@ -169,11 +234,39 @@ function App() {
       } 포함 ${topInsurers.length}개 원수사 비교가 적합합니다.`;
     }
 
+    let budgetGuide = "월보험료 예산을 입력하면 예산 맞춤 추천이 표시됩니다.";
+
+    if (budgetNum > 0 && sortedLackingItems.length > 0) {
+      if (recommendedByBudget.length === 0) {
+        budgetGuide = `입력 예산 ${budgetNum.toLocaleString()}원 기준으로는 핵심담보 전체 반영이 어려워, 최우선 담보부터 축소 설계가 필요합니다.`;
+      } else if (excludedByBudget.length > 0) {
+        budgetGuide = `입력 예산 ${budgetNum.toLocaleString()}원 기준 추천 우선 담보는 ${recommendedByBudget
+          .map((item) => item.name)
+          .join(", ")} 입니다. 일부 담보는 2차 제안으로 분리하는 것이 좋습니다.`;
+      } else {
+        budgetGuide = `입력 예산 ${budgetNum.toLocaleString()}원 범위 안에서 현재 부족 담보를 대부분 반영할 수 있습니다.`;
+      }
+    }
+
     let salesScript = "";
-    if (lackingFields.length > 0) {
+    if (sortedLackingItems.length > 0 && budgetNum > 0) {
+      if (excludedByBudget.length > 0) {
+        salesScript = `${form.customerName || "고객"}님은 현재 ${
+          sortedLackingItems.map((item) => item.name).join(", ")
+        } 보완 필요성이 보이는데, 월 예산 ${budgetNum.toLocaleString()}원 기준에서는 ${
+          recommendedByBudget.length > 0
+            ? recommendedByBudget.map((item) => item.name).join(", ")
+            : "최우선 핵심담보"
+        } 중심으로 먼저 구성드리고, 나머지는 2차로 검토드리는 방식이 가장 현실적입니다.`;
+      } else {
+        salesScript = `${form.customerName || "고객"}님은 현재 ${
+          sortedLackingItems.map((item) => item.name).join(", ")
+        } 부분 보완이 필요해 보이며, 입력하신 예산 범위 안에서 핵심담보 위주로 충분히 정리해드릴 수 있습니다.`;
+      }
+    } else if (sortedLackingItems.length > 0) {
       salesScript = `${form.customerName || "고객"}님은 현재 ${
-        lackingFields.join(", ")
-      } 부분이 상대적으로 비어 있을 가능성이 있어서, 이번 상담에서는 무조건 많이 넣는 방향보다 꼭 필요한 핵심 담보부터 우선적으로 점검드리는 게 좋겠습니다.`;
+        sortedLackingItems.map((item) => item.name).join(", ")
+      } 부분이 상대적으로 비어 있을 가능성이 있어서, 이번 상담에서는 꼭 필요한 핵심 담보부터 우선적으로 점검드리는 게 좋겠습니다.`;
     } else {
       salesScript = `${form.customerName || "고객"}님은 현재 기본 보장이 어느 정도 준비된 것으로 보여서, 이번 상담에서는 중복 여부와 유지 효율을 중심으로 정리해드리면 좋겠습니다.`;
     }
@@ -184,8 +277,12 @@ function App() {
       topInsurers,
       counselingPoints,
       planSummary,
-      lackingFields,
+      sortedLackingItems,
+      recommendedByBudget,
+      excludedByBudget,
+      budgetGuide,
       salesScript,
+      usedBudget,
     };
   }, [form]);
 
@@ -205,7 +302,7 @@ function App() {
           <img src="/logo.png" alt="유어즈에셋 로고" className="brand-logo" />
           <div>
             <h1>유어즈에셋 설계사 포털</h1>
-            <p>고객 입력형 추천 · 원수사 비교실 · 부족 담보 분석 · PDF 저장</p>
+            <p>고객 입력형 추천 · 원수사 비교실 · 부족 담보 분석 · 예산 맞춤 설계</p>
           </div>
         </div>
 
@@ -312,6 +409,16 @@ function App() {
           </div>
 
           <div className="field-block">
+            <label>월보험료 예산</label>
+            <input
+              type="number"
+              value={form.monthlyBudget}
+              onChange={(e) => handleChange("monthlyBudget", e.target.value)}
+              placeholder="예: 70000"
+            />
+          </div>
+
+          <div className="field-block">
             <label>기존 계약 유무</label>
             <select
               value={form.existingInsurance}
@@ -414,16 +521,50 @@ function App() {
           </div>
 
           <div className="section-block">
-            <h3>부족 담보 자동 분석</h3>
+            <h3>예산 맞춤 가이드</h3>
+            <div className="budget-box">
+              <div>{recommendation.budgetGuide}</div>
+              {Number(form.monthlyBudget || 0) > 0 && recommendation.usedBudget > 0 && (
+                <div className="budget-sub">
+                  우선 반영 예상 예산: {recommendation.usedBudget.toLocaleString()}원 / 입력 예산:{" "}
+                  {Number(form.monthlyBudget).toLocaleString()}원
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="section-block">
+            <h3>부족 담보 우선순위</h3>
+            <div className="priority-list">
+              {recommendation.sortedLackingItems.length > 0 ? (
+                recommendation.sortedLackingItems.map((item, idx) => (
+                  <div className="priority-card" key={item.name}>
+                    <div className="priority-rank">{idx + 1}</div>
+                    <div className="priority-content">
+                      <div className="priority-name">{item.name}</div>
+                      <div className="priority-meta">
+                        예상 반영 보험료 {item.estimatedCost.toLocaleString()}원
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <EmptyBox text="현재 입력 기준 부족 담보가 크게 보이지 않습니다." />
+              )}
+            </div>
+          </div>
+
+          <div className="section-block">
+            <h3>예산 범위 내 우선 추천 담보</h3>
             <div className="lack-wrap">
-              {recommendation.lackingFields.length > 0 ? (
-                recommendation.lackingFields.map((item) => (
-                  <span className="lack-badge" key={item}>
-                    {item}
+              {recommendation.recommendedByBudget.length > 0 ? (
+                recommendation.recommendedByBudget.map((item) => (
+                  <span className="fit-badge" key={item.name}>
+                    {item.name}
                   </span>
                 ))
               ) : (
-                <div className="empty-box">현재 입력 기준 부족 담보가 크게 보이지 않습니다.</div>
+                <EmptyBox text="예산을 입력하면 우선 추천 담보가 자동 표시됩니다." />
               )}
             </div>
           </div>
@@ -738,7 +879,8 @@ function App() {
 
         .plan-box,
         .memo-box,
-        .script-box {
+        .script-box,
+        .budget-box {
           border: 1px solid #dbe7f3;
           background: #f8fbff;
           border-radius: 14px;
@@ -749,20 +891,66 @@ function App() {
           white-space: pre-wrap;
         }
 
+        .budget-sub {
+          margin-top: 8px;
+          font-weight: 700;
+          color: #103b66;
+        }
+
         .lack-wrap {
           display: flex;
           flex-wrap: wrap;
           gap: 10px;
         }
 
-        .lack-badge {
+        .fit-badge {
           padding: 10px 14px;
-          background: #fff1f2;
-          color: #be123c;
+          background: #eefbf3;
+          color: #166534;
           border-radius: 999px;
           font-size: 13px;
           font-weight: 800;
-          border: 1px solid #fecdd3;
+          border: 1px solid #bbf7d0;
+        }
+
+        .priority-list {
+          display: grid;
+          gap: 12px;
+        }
+
+        .priority-card {
+          display: flex;
+          gap: 12px;
+          align-items: center;
+          border: 1px solid #e5e7eb;
+          border-radius: 16px;
+          padding: 14px;
+          background: #ffffff;
+        }
+
+        .priority-rank {
+          width: 36px;
+          height: 36px;
+          border-radius: 999px;
+          background: #103b66;
+          color: #fff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 800;
+          flex-shrink: 0;
+        }
+
+        .priority-name {
+          font-size: 15px;
+          font-weight: 800;
+          color: #111827;
+        }
+
+        .priority-meta {
+          margin-top: 4px;
+          font-size: 13px;
+          color: #64748b;
         }
 
         .recommend-list {
