@@ -1,69 +1,31 @@
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  orderBy,
-  query,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db } from "../firebase";
+const STORAGE_KEY = "yoursasset-portal-data";
 
-const LOCAL_KEY = "yoursasset_portal_cases";
-
-export function getLocalCases() {
+export function loadData() {
   try {
-    const raw = localStorage.getItem(LOCAL_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    console.error("loadData error:", error);
+    return null;
   }
 }
 
-export function saveLocalCase(item) {
-  const current = getLocalCases();
-
-  const nextItem = {
-    ...item,
-    id: crypto.randomUUID(),
-    savedAt: new Date().toISOString(),
-    source: "local",
-  };
-
-  const next = [nextItem, ...current];
-  localStorage.setItem(LOCAL_KEY, JSON.stringify(next));
-  return next;
+export function saveData(data) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    return true;
+  } catch (error) {
+    console.error("saveData error:", error);
+    return false;
+  }
 }
 
-export function deleteLocalCase(id) {
-  const current = getLocalCases();
-  const next = current.filter((item) => item.id !== id);
-  localStorage.setItem(LOCAL_KEY, JSON.stringify(next));
-  return next;
-}
-
-export async function saveFirebaseCase(item) {
-  const payload = {
-    ...item,
-    createdAt: serverTimestamp(),
-  };
-
-  const ref = await addDoc(collection(db, "portalCases"), payload);
-  return ref.id;
-}
-
-export async function getFirebaseCases() {
-  const q = query(collection(db, "portalCases"), orderBy("createdAt", "desc"));
-  const snapshot = await getDocs(q);
-
-  return snapshot.docs.map((docSnap) => ({
-    id: docSnap.id,
-    ...docSnap.data(),
-    source: "firebase",
-  }));
-}
-
-export async function deleteFirebaseCase(id) {
-  await deleteDoc(doc(db, "portalCases", id));
+export function clearData() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    return true;
+  } catch (error) {
+    console.error("clearData error:", error);
+    return false;
+  }
 }
