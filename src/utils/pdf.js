@@ -20,7 +20,6 @@ export async function exportElementToPdf(element, fileName = "유어즈에셋-�
 
   const pdfWidth = 210;
   const pdfHeight = 297;
-
   const imgWidth = pdfWidth;
   const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
