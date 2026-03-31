@@ -3,110 +3,113 @@ import { exportElementToPdf } from "./utils/pdf";
 import { loadData, saveData, clearData } from "./services/storage";
 import "./index.css";
 
-const INSURER_OPTIONS = [
+const INSURER_MASTER = [
   {
     id: "samsung",
     name: "삼성화재",
     logo: "/insurers/samsung.png",
     color: "#1f6feb",
-    products: [
-      {
-        id: 1,
-        category: "건강보험",
-        productName: "건강보험 New 플랜",
-        age: "30~65세",
-        premium: "월 48,000원",
-        coverage: "암/뇌/심장/수술비",
-        note: "표준형 설계 기준",
-      },
-      {
-        id: 2,
-        category: "간병보험",
-        productName: "간병케어 플랜",
-        age: "40~75세",
-        premium: "월 61,000원",
-        coverage: "간병인 사용일당/입원",
-        note: "고연령층 상담용",
-      },
-    ],
   },
   {
     id: "db",
     name: "DB손해보험",
     logo: "/insurers/db.png",
     color: "#1c8c4c",
-    products: [
-      {
-        id: 1,
-        category: "건강보험",
-        productName: "프로미 건강보험",
-        age: "20~70세",
-        premium: "월 52,000원",
-        coverage: "암/유사암/뇌혈관/허혈성",
-        note: "가성비형 비교용",
-      },
-      {
-        id: 2,
-        category: "운전자보험",
-        productName: "운전자비용 플랜",
-        age: "19~70세",
-        premium: "월 19,000원",
-        coverage: "교통사고처리지원금/변호사선임",
-        note: "실무 제안 빈도 높음",
-      },
-    ],
   },
   {
     id: "hyundai",
     name: "현대해상",
     logo: "/insurers/hyundai.png",
     color: "#ef7d00",
-    products: [
-      {
-        id: 1,
-        category: "태아보험",
-        productName: "굿앤굿 어린이 플랜",
-        age: "태아~15세",
-        premium: "월 73,000원",
-        coverage: "입원/수술/진단비",
-        note: "어린이보험 비교용",
-      },
-      {
-        id: 2,
-        category: "건강보험",
-        productName: "뉴 건강플랜",
-        age: "20~65세",
-        premium: "월 57,000원",
-        coverage: "암/뇌/심/질병수술",
-        note: "담보 조합형",
-      },
-    ],
   },
   {
     id: "heungkuk",
     name: "흥국화재",
     logo: "/insurers/heungkuk.png",
     color: "#d91c5c",
-    products: [
-      {
-        id: 1,
-        category: "건강보험",
-        productName: "흥Good 건강보험",
-        age: "20~70세",
-        premium: "월 44,000원",
-        coverage: "암/뇌혈관/심장질환",
-        note: "비교표 제안용",
-      },
-      {
-        id: 2,
-        category: "화재보험",
-        productName: "우리집 화재플랜",
-        age: "주택/상가",
-        premium: "월 16,000원",
-        coverage: "화재/누수/배상책임",
-        note: "생활밀착형",
-      },
-    ],
+  },
+];
+
+const PRODUCT_MASTER = [
+  {
+    id: "samsung-1",
+    insurerId: "samsung",
+    category: "건강보험",
+    productName: "건강보험 New 플랜",
+    age: "30~65세",
+    premium: "월 48,000원",
+    coverage: "암/뇌/심장/수술비",
+    note: "표준형 설계 기준",
+  },
+  {
+    id: "samsung-2",
+    insurerId: "samsung",
+    category: "간병보험",
+    productName: "간병케어 플랜",
+    age: "40~75세",
+    premium: "월 61,000원",
+    coverage: "간병인 사용일당/입원",
+    note: "고연령층 상담용",
+  },
+  {
+    id: "db-1",
+    insurerId: "db",
+    category: "건강보험",
+    productName: "프로미 건강보험",
+    age: "20~70세",
+    premium: "월 52,000원",
+    coverage: "암/유사암/뇌혈관/허혈성",
+    note: "가성비형 비교용",
+  },
+  {
+    id: "db-2",
+    insurerId: "db",
+    category: "운전자보험",
+    productName: "운전자비용 플랜",
+    age: "19~70세",
+    premium: "월 19,000원",
+    coverage: "교통사고처리지원금/변호사선임",
+    note: "실무 제안 빈도 높음",
+  },
+  {
+    id: "hyundai-1",
+    insurerId: "hyundai",
+    category: "태아보험",
+    productName: "굿앤굿 어린이 플랜",
+    age: "태아~15세",
+    premium: "월 73,000원",
+    coverage: "입원/수술/진단비",
+    note: "어린이보험 비교용",
+  },
+  {
+    id: "hyundai-2",
+    insurerId: "hyundai",
+    category: "건강보험",
+    productName: "뉴 건강플랜",
+    age: "20~65세",
+    premium: "월 57,000원",
+    coverage: "암/뇌/심/질병수술",
+    note: "담보 조합형",
+  },
+  {
+    id: "heungkuk-1",
+    insurerId: "heungkuk",
+    category: "건강보험",
+    productName: "흥Good 건강보험",
+    age: "20~70세",
+    premium: "월 44,000원",
+    coverage: "암/뇌혈관/심장질환",
+    note: "비교표 제안용",
+  },
+  {
+    id: "heungkuk-2",
+    insurerId: "heungkuk",
+    category: "화재보험",
+    productName: "우리집 화재플랜",
+    age: "주택/상가",
+    premium: "월 16,000원",
+    coverage: "화재/누수/배상책임",
+    note: "생활밀착형",
   },
 ];
 
@@ -116,10 +119,7 @@ const DEFAULT_FORM = {
   memo: "",
   selectedInsurer: "all",
   selectedCategory: "all",
-};
-
-const STORAGE_EMPTY = {
-  form: DEFAULT_FORM,
+  searchKeyword: "",
 };
 
 function App() {
@@ -141,31 +141,47 @@ function App() {
   }, [form]);
 
   const categoryOptions = useMemo(() => {
-    const set = new Set();
-    INSURER_OPTIONS.forEach((insurer) => {
-      insurer.products.forEach((product) => set.add(product.category));
-    });
+    const set = new Set(PRODUCT_MASTER.map((item) => item.category));
     return ["all", ...Array.from(set)];
   }, []);
 
-  const filteredInsurers = useMemo(() => {
-    return INSURER_OPTIONS.map((insurer) => {
+  const filteredProducts = useMemo(() => {
+    return PRODUCT_MASTER.filter((product) => {
       const insurerMatch =
-        form.selectedInsurer === "all" || form.selectedInsurer === insurer.id;
+        form.selectedInsurer === "all" ||
+        product.insurerId === form.selectedInsurer;
 
-      const filteredProducts = insurer.products.filter((product) => {
-        const categoryMatch =
-          form.selectedCategory === "all" ||
-          product.category === form.selectedCategory;
-        return insurerMatch && categoryMatch;
-      });
+      const categoryMatch =
+        form.selectedCategory === "all" ||
+        product.category === form.selectedCategory;
 
-      return {
-        ...insurer,
-        products: filteredProducts,
-      };
-    }).filter((insurer) => insurer.products.length > 0);
-  }, [form.selectedInsurer, form.selectedCategory]);
+      const keyword = form.searchKeyword.trim().toLowerCase();
+      const keywordMatch =
+        keyword === "" ||
+        [
+          product.productName,
+          product.category,
+          product.coverage,
+          product.note,
+          product.age,
+          product.premium,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(keyword);
+
+      return insurerMatch && categoryMatch && keywordMatch;
+    });
+  }, [form]);
+
+  const insurerCards = useMemo(() => {
+    return INSURER_MASTER.map((insurer) => ({
+      ...insurer,
+      products: filteredProducts.filter(
+        (product) => product.insurerId === insurer.id
+      ),
+    })).filter((insurer) => insurer.products.length > 0);
+  }, [filteredProducts]);
 
   const handleChange = (key, value) => {
     setForm((prev) => ({
@@ -189,7 +205,7 @@ function App() {
 
   const handlePdfExport = async () => {
     if (!pdfRef.current) return;
-    await exportElementToPdf(pdfRef.current, "유어즈에셋-상품비교실.pdf");
+    await exportElementToPdf(pdfRef.current, "유어즈에셋-원수사별-상품비교실.pdf");
   };
 
   const handleLogoError = (insurerId) => {
@@ -233,7 +249,7 @@ function App() {
       <main className="page-body">
         <section className="control-panel">
           <div className="panel-title-row">
-            <h2>상담 기본 정보</h2>
+            <h2>상품 비교 조건</h2>
             {savedMessage && <span className="saved-badge">{savedMessage}</span>}
           </div>
 
@@ -265,7 +281,7 @@ function App() {
                 }
               >
                 <option value="all">전체 원수사</option>
-                {INSURER_OPTIONS.map((insurer) => (
+                {INSURER_MASTER.map((insurer) => (
                   <option key={insurer.id} value={insurer.id}>
                     {insurer.name}
                   </option>
@@ -290,6 +306,15 @@ function App() {
                     </option>
                   ))}
               </select>
+            </div>
+
+            <div className="field field-full">
+              <label>검색어</label>
+              <input
+                value={form.searchKeyword}
+                onChange={(e) => handleChange("searchKeyword", e.target.value)}
+                placeholder="상품명, 보장내용, 비고 등 검색"
+              />
             </div>
 
             <div className="field field-full">
@@ -318,12 +343,13 @@ function App() {
                 />
                 <div>
                   <p>상품 비교실</p>
-                  <h2>원수사별 상품 비교 구조</h2>
+                  <h2>원수사별 로고 카드형 비교실</h2>
                 </div>
               </div>
               <div className="summary-meta">
                 <span>설계사: {form.consultant || "-"}</span>
                 <span>고객명: {form.customer || "-"}</span>
+                <span>검색결과: {filteredProducts.length}건</span>
               </div>
             </div>
 
@@ -336,7 +362,7 @@ function App() {
           </div>
 
           <section className="insurer-grid">
-            {filteredInsurers.map((insurer) => (
+            {insurerCards.map((insurer) => (
               <article className="insurer-card" key={insurer.id}>
                 <div
                   className="insurer-card-top"
@@ -362,6 +388,9 @@ function App() {
                     <div>
                       <p className="insurer-label">INSURER</p>
                       <h3>{insurer.name}</h3>
+                      <span className="insurer-count">
+                        상품 {insurer.products.length}건
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -380,7 +409,7 @@ function App() {
                     </thead>
                     <tbody>
                       {insurer.products.map((product) => (
-                        <tr key={`${insurer.id}-${product.id}`}>
+                        <tr key={product.id}>
                           <td>{product.category}</td>
                           <td>{product.productName}</td>
                           <td>{product.age}</td>
