@@ -1,80 +1,86 @@
 @font-face {
-  font-family: "NotoSansKR";
+  font-family: "Noto Sans KR";
   src: url("/fonts/NotoSansKR-Regular.ttf") format("truetype");
   font-weight: 400;
   font-style: normal;
+}
+
+:root {
+  font-family: "Noto Sans KR", sans-serif;
+  color: #1f2937;
+  background: #f3f6fb;
+  line-height: 1.5;
+  font-weight: 400;
 }
 
 * {
   box-sizing: border-box;
 }
 
-body {
+html,
+body,
+#root {
   margin: 0;
-  font-family: "NotoSansKR", sans-serif;
-  background: #f3f6fb;
-  color: #1f2937;
+  min-height: 100%;
+  background: linear-gradient(180deg, #eef3fb 0%, #f8fbff 100%);
+}
+
+body {
+  min-width: 1280px;
 }
 
 button,
 input,
-textarea,
-select {
+select,
+textarea {
   font: inherit;
 }
 
-body,
-input,
-textarea,
-select,
-button {
-  font-family: "NotoSansKR", sans-serif;
-}
-
-.app-shell {
+.portal-shell {
   min-height: 100vh;
   padding: 24px;
 }
 
 .topbar {
-  max-width: 1280px;
-  margin: 0 auto 18px;
-  padding: 24px 28px;
-  border-radius: 22px;
-  background: linear-gradient(135deg, #0a2b78, #173f9d 58%, #e11d2e 140%);
-  color: #fff;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
-  box-shadow: 0 14px 40px rgba(10, 43, 120, 0.22);
+  gap: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #dce6f5;
+  border-radius: 24px;
+  padding: 22px 26px;
+  box-shadow: 0 14px 40px rgba(31, 54, 88, 0.08);
+  margin-bottom: 20px;
 }
 
-.brand-block {
+.brand-wrap {
   display: flex;
   align-items: center;
   gap: 18px;
 }
 
-.brand-logo {
-  width: 220px;
-  max-width: 40vw;
-  height: auto;
-  display: block;
+.main-logo {
+  width: 64px;
+  height: 64px;
   object-fit: contain;
-  background: rgba(255, 255, 255, 0.04);
-  padding: 6px 4px;
-  border-radius: 10px;
+  border-radius: 16px;
+  background: #fff;
+  padding: 6px;
+  border: 1px solid #e5edf8;
 }
 
-.topbar h1 {
+.brand-sub {
+  margin: 0 0 4px 0;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: #6b7280;
+}
+
+.brand-wrap h1 {
   margin: 0;
-  font-size: 30px;
-}
-
-.topbar p {
-  margin: 8px 0 0;
-  opacity: 0.92;
+  font-size: 28px;
+  color: #122033;
 }
 
 .topbar-actions {
@@ -82,340 +88,265 @@ button {
   gap: 10px;
 }
 
-.pdf-btn,
 .primary-btn,
-.ghost-btn,
-.danger-btn {
+.ghost-btn {
   border: none;
-  border-radius: 12px;
-  padding: 11px 16px;
+  border-radius: 14px;
+  padding: 12px 18px;
   cursor: pointer;
   font-weight: 700;
 }
 
-.pdf-btn,
 .primary-btn {
-  background: #0b2f86;
-  color: white;
+  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  color: #fff;
 }
 
 .ghost-btn {
-  background: rgba(255, 255, 255, 0.14);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: #eef4ff;
+  color: #1d4ed8;
 }
 
-.danger-btn {
-  background: #ef4444;
-  color: white;
-  padding: 8px 12px;
-}
-
-.tabbar {
-  max-width: 1280px;
-  margin: 0 auto 18px;
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.tab {
-  border: none;
-  border-radius: 999px;
-  padding: 12px 18px;
-  background: white;
-  color: #0b2f86;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
-}
-
-.tab.active {
-  background: #0b2f86;
-  color: white;
-}
-
-.portal-wrap {
-  max-width: 1280px;
-  margin: 0 auto;
+.page-body {
   display: grid;
+  grid-template-columns: 320px 1fr;
   gap: 20px;
 }
 
-.card {
-  background: white;
-  border-radius: 20px;
-  padding: 24px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+.control-panel,
+.pdf-area {
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid #dce6f5;
+  border-radius: 24px;
+  box-shadow: 0 14px 40px rgba(31, 54, 88, 0.08);
 }
 
-.card h2 {
-  margin-top: 0;
-  margin-bottom: 18px;
-  font-size: 22px;
-  color: #0b2f86;
+.control-panel {
+  padding: 22px;
+  height: fit-content;
 }
 
-.grid,
-.grid-2,
-.stats-grid,
-.product-grid {
+.panel-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.panel-title-row h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.saved-badge {
+  background: #e8f7ec;
+  color: #167c3a;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.form-grid {
   display: grid;
-  gap: 16px;
-}
-
-.grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.grid-2 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.stats-grid {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-}
-
-.product-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.stat-card {
-  background: linear-gradient(180deg, #ffffff, #f8fbff);
-  border: 1px solid #e6edf8;
-  border-radius: 18px;
-  padding: 20px;
-}
-
-.stat-label {
-  color: #64748b;
-  font-size: 14px;
-  margin-bottom: 8px;
-}
-
-.stat-value {
-  font-size: 30px;
-  font-weight: 800;
-  color: #0b2f86;
+  gap: 14px;
 }
 
 .field {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 8px;
 }
 
 .field label {
+  font-size: 14px;
   font-weight: 700;
   color: #334155;
 }
 
 .field input,
-.field textarea,
 .field select,
-.inline-form input {
+.field textarea {
   width: 100%;
-  border: 1px solid #d6deea;
-  border-radius: 12px;
-  padding: 12px 14px;
-  background: #fff;
-}
-
-.field.full {
-  margin-top: 16px;
-}
-
-.action-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
-}
-
-.table-wrap {
-  overflow-x: auto;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 760px;
-}
-
-thead th {
-  text-align: left;
-  background: #eff5fc;
-  color: #163a6b;
-  padding: 12px;
-  font-size: 14px;
-}
-
-tbody td {
-  padding: 12px;
-  border-top: 1px solid #edf2f7;
-  font-size: 14px;
-}
-
-.empty-cell,
-.empty-text {
-  text-align: center;
-  color: #94a3b8;
-  padding: 24px 12px;
-}
-
-.list-wrap {
-  display: grid;
-  gap: 12px;
-}
-
-.list-item {
-  border: 1px solid #e7edf6;
+  border: 1px solid #d7e2f0;
   border-radius: 14px;
-  padding: 14px 16px;
-  background: #fbfdff;
+  padding: 12px 14px;
+  background: #f9fbff;
+  outline: none;
 }
 
-.sub-text {
-  color: #64748b;
-  font-size: 14px;
-  margin-top: 4px;
+.field textarea {
+  resize: vertical;
 }
 
-.badge-row {
+.field-full {
+  grid-column: 1 / -1;
+}
+
+.pdf-area {
+  padding: 22px;
+}
+
+.summary-card {
+  border: 1px solid #e3ebf7;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #ffffff, #f8fbff);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.summary-header {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 10px;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
 }
 
-.mini-badge {
-  display: inline-flex;
+.summary-brand {
+  display: flex;
   align-items: center;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: #e8f0fb;
-  color: #0b2f86;
+  gap: 14px;
+}
+
+.summary-logo {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid #e5edf8;
+  border-radius: 14px;
+  padding: 6px;
+}
+
+.summary-brand p {
+  margin: 0 0 4px;
   font-size: 12px;
+  color: #64748b;
+}
+
+.summary-brand h2 {
+  margin: 0;
+  font-size: 24px;
+  color: #0f172a;
+}
+
+.summary-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.summary-meta span {
+  background: #eef4ff;
+  color: #1e40af;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 13px;
   font-weight: 700;
 }
 
-.product-card h3 {
-  margin: 12px 0;
-  color: #0b2f86;
-}
-
-.product-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.product-insurer {
-  font-weight: 800;
-  color: #0b2f86;
-}
-
-.product-category {
-  font-size: 13px;
-  color: #64748b;
-}
-
-.product-meta {
-  font-size: 14px;
-  color: #475569;
-  margin-top: 6px;
-}
-
-.product-memo {
-  margin-top: 12px;
-  color: #334155;
-  line-height: 1.6;
-}
-
-.inline-form {
-  display: flex;
-  gap: 10px;
-}
-
-.todo-list {
-  display: grid;
-  gap: 12px;
-  margin-top: 18px;
-}
-
-.todo-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  border: 1px solid #e6edf8;
-  background: #fbfdff;
-  border-radius: 14px;
-  padding: 12px 14px;
-}
-
-.todo-text {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #1e293b;
-}
-
-.todo-text.done span {
-  text-decoration: line-through;
-  color: #94a3b8;
-}
-
-.note-box {
-  line-height: 1.9;
-  color: #334155;
+.memo-box {
+  margin-top: 16px;
   background: #f8fbff;
-  border: 1px solid #e6edf8;
+  border: 1px solid #e2eaf6;
   border-radius: 16px;
-  padding: 18px;
+  padding: 16px;
 }
 
-@media (max-width: 1100px) {
-  .stats-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .product-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .brand-logo {
-    width: 180px;
-  }
+.memo-box strong {
+  display: block;
+  margin-bottom: 8px;
 }
 
-@media (max-width: 768px) {
-  .app-shell {
-    padding: 16px;
-  }
+.memo-box p {
+  margin: 0;
+  white-space: pre-wrap;
+}
 
-  .topbar {
-    flex-direction: column;
-    align-items: flex-start;
-  }
+.insurer-grid {
+  display: grid;
+  gap: 18px;
+}
 
-  .brand-block {
-    flex-direction: column;
-    align-items: flex-start;
-  }
+.insurer-card {
+  border: 1px solid #dde7f4;
+  border-radius: 22px;
+  overflow: hidden;
+  background: #fff;
+}
 
-  .brand-logo {
-    width: 170px;
-    max-width: 100%;
-  }
+.insurer-card-top {
+  padding: 18px 20px;
+  border-left: 6px solid #1d4ed8;
+  background: linear-gradient(135deg, #f9fbff, #f3f7fd);
+}
 
-  .grid,
-  .grid-2,
-  .stats-grid,
-  .product-grid {
-    grid-template-columns: 1fr;
-  }
+.insurer-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
 
-  .inline-form {
-    flex-direction: column;
-  }
+.insurer-logo {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid #e5edf8;
+  border-radius: 14px;
+  padding: 6px;
+}
+
+.insurer-logo-fallback {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.insurer-label {
+  margin: 0 0 4px;
+  font-size: 11px;
+  color: #64748b;
+  letter-spacing: 0.12em;
+}
+
+.insurer-brand h3 {
+  margin: 0;
+  font-size: 22px;
+  color: #0f172a;
+}
+
+.product-table-wrap {
+  overflow-x: auto;
+}
+
+.product-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.product-table thead th {
+  background: #f8fbff;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 800;
+  text-align: left;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e2eaf6;
+}
+
+.product-table tbody td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #edf2f8;
+  font-size: 14px;
+  vertical-align: top;
+}
+
+.product-table tbody tr:last-child td {
+  border-bottom: none;
 }
