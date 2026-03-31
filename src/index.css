@@ -12,14 +12,23 @@
 body {
   margin: 0;
   font-family: "NotoSansKR", sans-serif;
-  background: #f5f7fb;
+  background: #f3f6fb;
   color: #1f2937;
 }
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
+}
+
+body,
+input,
+textarea,
+select,
+button {
+  font-family: "NotoSansKR", sans-serif;
 }
 
 .app-shell {
@@ -28,40 +37,89 @@ textarea {
 }
 
 .topbar {
-  max-width: 1200px;
-  margin: 0 auto 20px;
-  padding: 20px 24px;
-  border-radius: 18px;
-  background: linear-gradient(135deg, #163a6b, #245c9f);
-  color: white;
+  max-width: 1280px;
+  margin: 0 auto 18px;
+  padding: 24px 28px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #14345d, #245c9f);
+  color: #fff;
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
   gap: 16px;
+  box-shadow: 0 14px 40px rgba(20, 52, 93, 0.25);
 }
 
 .topbar h1 {
   margin: 0;
-  font-size: 28px;
+  font-size: 30px;
 }
 
 .topbar p {
-  margin: 6px 0 0;
-  opacity: 0.9;
+  margin: 8px 0 0;
+  opacity: 0.92;
 }
 
-.pdf-btn {
+.topbar-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.pdf-btn,
+.primary-btn,
+.ghost-btn,
+.danger-btn {
   border: none;
-  background: white;
-  color: #163a6b;
-  padding: 12px 18px;
   border-radius: 12px;
+  padding: 11px 16px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.pdf-btn,
+.primary-btn {
+  background: #163a6b;
+  color: white;
+}
+
+.ghost-btn {
+  background: rgba(255, 255, 255, 0.18);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.danger-btn {
+  background: #ef4444;
+  color: white;
+  padding: 8px 12px;
+}
+
+.tabbar {
+  max-width: 1280px;
+  margin: 0 auto 18px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tab {
+  border: none;
+  border-radius: 999px;
+  padding: 12px 18px;
+  background: white;
+  color: #24456e;
   font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+.tab.active {
+  background: #163a6b;
+  color: white;
 }
 
 .portal-wrap {
-  max-width: 1200px;
+  max-width: 1280px;
   margin: 0 auto;
   display: grid;
   gap: 20px;
@@ -69,20 +127,59 @@ textarea {
 
 .card {
   background: white;
-  border-radius: 18px;
+  border-radius: 20px;
   padding: 24px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
 }
 
-.hero-card h2,
-.preview-card h2 {
+.card h2 {
   margin-top: 0;
+  margin-bottom: 18px;
+  font-size: 22px;
+  color: #163a6b;
+}
+
+.grid,
+.grid-2,
+.stats-grid,
+.product-grid {
+  display: grid;
+  gap: 16px;
 }
 
 .grid {
-  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+}
+
+.grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stats-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.product-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.stat-card {
+  background: linear-gradient(180deg, #ffffff, #f7faff);
+  border: 1px solid #e6edf8;
+  border-radius: 18px;
+  padding: 20px;
+}
+
+.stat-label {
+  color: #64748b;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.stat-value {
+  font-size: 30px;
+  font-weight: 800;
+  color: #163a6b;
 }
 
 .field {
@@ -93,13 +190,15 @@ textarea {
 
 .field label {
   font-weight: 700;
-  color: #374151;
+  color: #334155;
 }
 
 .field input,
-.field textarea {
+.field textarea,
+.field select,
+.inline-form input {
   width: 100%;
-  border: 1px solid #d1d5db;
+  border: 1px solid #d6deea;
   border-radius: 12px;
   padding: 12px 14px;
   background: #fff;
@@ -109,26 +208,183 @@ textarea {
   margin-top: 16px;
 }
 
-.preview-box {
-  border: 1px solid #e5e7eb;
-  background: #fafafa;
-  border-radius: 14px;
-  padding: 20px;
+.action-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 
-.memo-preview {
-  white-space: pre-wrap;
-  line-height: 1.7;
-  min-height: 120px;
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+
+thead th {
+  text-align: left;
+  background: #eff5fc;
+  color: #1e3a5f;
+  padding: 12px;
+  font-size: 14px;
+}
+
+tbody td {
+  padding: 12px;
+  border-top: 1px solid #edf2f7;
+  font-size: 14px;
+}
+
+.empty-cell,
+.empty-text {
+  text-align: center;
+  color: #94a3b8;
+  padding: 24px 12px;
+}
+
+.list-wrap {
+  display: grid;
+  gap: 12px;
+}
+
+.list-item {
+  border: 1px solid #e7edf6;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: #fbfdff;
+}
+
+.sub-text {
+  color: #64748b;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.badge-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.mini-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #e8f0fb;
+  color: #163a6b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.product-card h3 {
+  margin: 12px 0;
+  color: #163a6b;
+}
+
+.product-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.product-insurer {
+  font-weight: 800;
+  color: #163a6b;
+}
+
+.product-category {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.product-meta {
+  font-size: 14px;
+  color: #475569;
+  margin-top: 6px;
+}
+
+.product-memo {
+  margin-top: 12px;
+  color: #334155;
+  line-height: 1.6;
+}
+
+.inline-form {
+  display: flex;
+  gap: 10px;
+}
+
+.todo-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.todo-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #e6edf8;
+  background: #fbfdff;
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+
+.todo-text {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #1e293b;
+}
+
+.todo-text.done span {
+  text-decoration: line-through;
+  color: #94a3b8;
+}
+
+.note-box {
+  line-height: 1.9;
+  color: #334155;
+  background: #f8fbff;
+  border: 1px solid #e6edf8;
+  border-radius: 16px;
+  padding: 18px;
+}
+
+@media (max-width: 1100px) {
+  .stats-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 768px) {
+  .app-shell {
+    padding: 16px;
+  }
+
   .topbar {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .grid {
+  .grid,
+  .grid-2,
+  .stats-grid,
+  .product-grid {
     grid-template-columns: 1fr;
+  }
+
+  .inline-form {
+    flex-direction: column;
   }
 }
