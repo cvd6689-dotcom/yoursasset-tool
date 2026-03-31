@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import insurers from "./data/insurers";
 import products from "./data/products";
 
-const STORAGE_KEY = "yoursasset_consulting_portal_v2";
+const STORAGE_KEY = "yoursasset_consulting_portal_v3";
 
 const initialForm = {
   customerName: "",
@@ -14,6 +14,7 @@ const initialForm = {
   driving: "아니오",
   purpose: "보장분석",
   interests: [],
+  memo: "",
 };
 
 const interestOptions = [
@@ -97,6 +98,7 @@ function App() {
       .sort((a, b) => b.score - a.score);
 
     const topProducts = scoredProducts.slice(0, 3);
+    const mainProduct = topProducts[0] || null;
 
     const insurerScores = insurers.map((insurer) => {
       let score = 0;
@@ -123,25 +125,31 @@ function App() {
       .slice(0, 3);
 
     const counselingPoints = [
-      `${form.customerName || "고객"} 고객은 ${form.purpose} 목적 상담이 우선입니다.`,
+      `${form.customerName || "고객"} 고객은 ${form.purpose} 중심 상담이 우선입니다.`,
       form.driving === "예"
-        ? "운전 여부가 있으므로 자동차보험과 별도로 운전자보험 설명이 필요합니다."
+        ? "운전 여부가 있으므로 운전자 비용보장 비교 설명이 필요합니다."
         : "운전 여부가 없으므로 건강/가족보장 중심 상담이 적합합니다.",
       form.hasChildren === "있음"
-        ? "자녀 보장과 부모 보장 연결 상담 포인트를 함께 제시하세요."
-        : "개인 중심 보장 설계와 유지여력 점검이 우선입니다.",
+        ? "자녀 보장과 부모 보장을 연결해 교차 상담하는 흐름이 좋습니다."
+        : "개인 중심 핵심보장과 유지여력 점검이 우선입니다.",
       form.married === "기혼"
-        ? "가족 책임 관점의 보장 필요금액 설명이 효과적입니다."
-        : "현재 생활패턴과 소득 대비 핵심보장 우선 설계가 적합합니다.",
+        ? "가족 책임과 생활비 공백 관점으로 설명하면 설득력이 높습니다."
+        : "현재 소득 대비 꼭 필요한 담보부터 우선 제안하는 것이 적합합니다.",
     ];
 
-    const compareFields = [...new Set(topProducts.flatMap((item) => item.compareFields))].slice(0, 6);
+    let planSummary = "입력값을 기준으로 추천 설계안이 생성됩니다.";
+    if (mainProduct) {
+      planSummary = `${form.customerName || "고객"} 고객에게는 "${mainProduct.category}" 중심 제안이 우선이며, ${
+        topInsurers[0]?.name || "추천 원수사"
+      } 포함 ${topInsurers.length}개 원수사 비교가 적합합니다.`;
+    }
 
     return {
       topProducts,
+      mainProduct,
       topInsurers,
       counselingPoints,
-      compareFields,
+      planSummary,
     };
   }, [form]);
 
@@ -161,7 +169,7 @@ function App() {
           <img src="/logo.png" alt="유어즈에셋 로고" className="brand-logo" />
           <div>
             <h1>유어즈에셋 설계사 포털</h1>
-            <p>고객 입력형 상담 추천 · 원수사 비교 · PDF 저장</p>
+            <p>고객 입력형 추천 · 원수사 비교실 · PDF 저장</p>
           </div>
         </div>
 
@@ -266,10 +274,20 @@ function App() {
               ))}
             </div>
           </div>
+
+          <div className="field-block">
+            <label>상담 메모</label>
+            <textarea
+              value={form.memo}
+              onChange={(e) => handleChange("memo", e.target.value)}
+              placeholder="예: 기존 실손 있음 / 운전 잦음 / 최근 병력 확인 필요"
+              rows={6}
+            />
+          </div>
         </section>
 
         <section className="panel result-panel">
-          <h2>자동 추천 결과</h2>
+          <h2>실무 추천 결과</h2>
 
           <div className="summary-card">
             <div className="summary-title">
@@ -279,6 +297,11 @@ function App() {
             <div className="summary-sub">
               {form.married} · 자녀 {form.hasChildren} · 운전 {form.driving} · 상담목적 {form.purpose}
             </div>
+          </div>
+
+          <div className="section-block">
+            <h3>추천 설계안 요약</h3>
+            <div className="plan-box">{recommendation.planSummary}</div>
           </div>
 
           <div className="section-block">
@@ -337,6 +360,38 @@ function App() {
           </div>
 
           <div className="section-block">
+            <h3>원수사 비교표</h3>
+            {recommendation.mainProduct && recommendation.topInsurers.length > 0 ? (
+              <div className="table-wrap">
+                <table className="compare-table">
+                  <thead>
+                    <tr>
+                      <th>비교항목</th>
+                      {recommendation.topInsurers.map((insurer) => (
+                        <th key={insurer.id}>{insurer.name}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recommendation.mainProduct.compareFields.map((field) => (
+                      <tr key={field}>
+                        <td className="row-title">{field}</td>
+                        {recommendation.topInsurers.map((insurer) => (
+                          <td key={insurer.id + field}>
+                            {recommendation.mainProduct.compareData?.[insurer.id]?.[field] || "-"}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyBox text="비교표를 생성하려면 고객 정보를 입력하세요." />
+            )}
+          </div>
+
+          <div className="section-block">
             <h3>상담 포인트</h3>
             <div className="point-box">
               {recommendation.counselingPoints.map((point, idx) => (
@@ -348,18 +403,8 @@ function App() {
           </div>
 
           <div className="section-block">
-            <h3>비교 항목</h3>
-            <div className="compare-wrap">
-              {recommendation.compareFields.length > 0 ? (
-                recommendation.compareFields.map((field) => (
-                  <span className="compare-badge" key={field}>
-                    {field}
-                  </span>
-                ))
-              ) : (
-                <EmptyBox text="비교 항목이 아직 없습니다." />
-              )}
-            </div>
+            <h3>상담 메모 확인</h3>
+            <div className="memo-box">{form.memo || "입력된 상담 메모가 없습니다."}</div>
           </div>
         </section>
       </main>
@@ -487,14 +532,22 @@ function App() {
           color: #334155;
         }
 
-        input, select {
+        input, select, textarea {
           width: 100%;
-          height: 46px;
           border: 1px solid #dbe1ea;
           border-radius: 12px;
-          padding: 0 14px;
+          padding: 12px 14px;
           font-size: 14px;
           background: #fff;
+          font-family: 'Noto Sans KR', sans-serif;
+        }
+
+        input, select {
+          height: 46px;
+        }
+
+        textarea {
+          resize: vertical;
         }
 
         .field-block {
@@ -552,6 +605,18 @@ function App() {
           margin: 0 0 12px;
           font-size: 18px;
           color: #0f2f4f;
+        }
+
+        .plan-box,
+        .memo-box {
+          border: 1px solid #dbe7f3;
+          background: #f8fbff;
+          border-radius: 14px;
+          padding: 16px;
+          font-size: 14px;
+          line-height: 1.7;
+          color: #334155;
+          white-space: pre-wrap;
         }
 
         .recommend-list {
@@ -641,6 +706,39 @@ function App() {
           font-weight: 700;
         }
 
+        .table-wrap {
+          overflow-x: auto;
+          border: 1px solid #e5e7eb;
+          border-radius: 16px;
+        }
+
+        .compare-table {
+          width: 100%;
+          border-collapse: collapse;
+          background: #fff;
+          min-width: 680px;
+        }
+
+        .compare-table th,
+        .compare-table td {
+          border-bottom: 1px solid #e5e7eb;
+          padding: 14px 12px;
+          text-align: center;
+          font-size: 14px;
+        }
+
+        .compare-table th {
+          background: #103b66;
+          color: #fff;
+          font-weight: 800;
+        }
+
+        .compare-table .row-title {
+          background: #f8fbff;
+          color: #103b66;
+          font-weight: 800;
+        }
+
         .point-box {
           display: grid;
           gap: 10px;
@@ -653,21 +751,6 @@ function App() {
           border-radius: 10px;
           font-size: 14px;
           line-height: 1.6;
-        }
-
-        .compare-wrap {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 10px;
-        }
-
-        .compare-badge {
-          padding: 10px 14px;
-          background: #eef4fb;
-          color: #103b66;
-          border-radius: 999px;
-          font-size: 13px;
-          font-weight: 800;
         }
 
         .empty-box {
