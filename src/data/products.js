@@ -8,6 +8,8 @@ const PRODUCT_MASTER = [
     premium: "월 48,000원",
     coverage: "암/뇌/심장/수술비",
     note: "표준형 설계 기준",
+    order: 1,
+    useYn: true,
   },
   {
     id: "samsung-2",
@@ -18,6 +20,8 @@ const PRODUCT_MASTER = [
     premium: "월 61,000원",
     coverage: "간병인 사용일당/입원",
     note: "고연령층 상담용",
+    order: 2,
+    useYn: true,
   },
   {
     id: "db-1",
@@ -28,6 +32,8 @@ const PRODUCT_MASTER = [
     premium: "월 52,000원",
     coverage: "암/유사암/뇌혈관/허혈성",
     note: "가성비형 비교용",
+    order: 1,
+    useYn: true,
   },
   {
     id: "db-2",
@@ -38,6 +44,8 @@ const PRODUCT_MASTER = [
     premium: "월 19,000원",
     coverage: "교통사고처리지원금/변호사선임",
     note: "실무 제안 빈도 높음",
+    order: 2,
+    useYn: true,
   },
   {
     id: "hyundai-1",
@@ -48,6 +56,8 @@ const PRODUCT_MASTER = [
     premium: "월 73,000원",
     coverage: "입원/수술/진단비",
     note: "어린이보험 비교용",
+    order: 1,
+    useYn: true,
   },
   {
     id: "hyundai-2",
@@ -58,6 +68,8 @@ const PRODUCT_MASTER = [
     premium: "월 57,000원",
     coverage: "암/뇌/심/질병수술",
     note: "담보 조합형",
+    order: 2,
+    useYn: true,
   },
   {
     id: "heungkuk-1",
@@ -68,6 +80,8 @@ const PRODUCT_MASTER = [
     premium: "월 44,000원",
     coverage: "암/뇌혈관/심장질환",
     note: "비교표 제안용",
+    order: 1,
+    useYn: true,
   },
   {
     id: "heungkuk-2",
@@ -78,6 +92,8 @@ const PRODUCT_MASTER = [
     premium: "월 16,000원",
     coverage: "화재/누수/배상책임",
     note: "생활밀착형",
+    order: 2,
+    useYn: true,
   },
 ];
 
