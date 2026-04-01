@@ -8,6 +8,42 @@ export const comparisonTemplates = {
   fire: ["화재손해", "누수", "배상책임", "가재도구", "임대인/임차인", "실생활 활용"],
 };
 
+export const consultationPurposes = [
+  "보장분석",
+  "신규가입",
+  "기존보험 리모델링",
+  "암 대비",
+  "건강종합 대비",
+  "운전자 대비",
+  "자녀보험 상담",
+  "부모님 간병/치매 대비",
+  "화재/생활보장 상담",
+];
+
+export const interestOptions = [
+  "암",
+  "뇌/심장",
+  "수술비",
+  "입원일당",
+  "운전자",
+  "상해",
+  "어린이",
+  "간병/치매",
+  "화재/누수",
+];
+
+export const existingCoverageOptions = [
+  { key: "realLoss", label: "실손 보유" },
+  { key: "cancer", label: "암 진단비 보유" },
+  { key: "brainHeart", label: "뇌/심장 보유" },
+  { key: "surgery", label: "수술비 보유" },
+  { key: "driver", label: "운전자 보유" },
+  { key: "accident", label: "상해 보유" },
+  { key: "child", label: "자녀보험 보유" },
+  { key: "care", label: "간병/치매 보유" },
+  { key: "fire", label: "화재/생활보장 보유" },
+];
+
 export const productCatalog = [
   {
     id: "health_samsung",
@@ -131,7 +167,7 @@ export const productCatalog = [
       변호사선임비: "상",
       벌금: "상",
       대인형사합의: "상",
-      중상해대응: "중",
+      "중상해 대응": "중",
       가성비: "상",
     },
   },
@@ -149,7 +185,7 @@ export const productCatalog = [
       변호사선임비: "상",
       벌금: "중",
       대인형사합의: "상",
-      중상해대응: "상",
+      "중상해 대응": "상",
       가성비: "중",
     },
   },
@@ -167,7 +203,7 @@ export const productCatalog = [
       변호사선임비: "상",
       벌금: "상",
       대인형사합의: "중",
-      중상해대응: "중",
+      "중상해 대응": "중",
       가성비: "상",
     },
   },
@@ -186,7 +222,7 @@ export const productCatalog = [
       후유장해: "상",
       일상배상: "중",
       입원일당: "중",
-      직업위험대응: "상",
+      "직업위험 대응": "상",
     },
   },
   {
@@ -204,7 +240,7 @@ export const productCatalog = [
       후유장해: "상",
       일상배상: "상",
       입원일당: "중",
-      직업위험대응: "중",
+      "직업위험 대응": "중",
     },
   },
   {
@@ -221,8 +257,8 @@ export const productCatalog = [
       "입원/수술": "상",
       질병후유장해: "상",
       "암/뇌/심장": "상",
-      성장기특약: "상",
-      부모상담포인트: "상",
+      "성장기 특약": "상",
+      "부모 상담포인트": "상",
     },
   },
   {
@@ -239,8 +275,8 @@ export const productCatalog = [
       "입원/수술": "상",
       질병후유장해: "중",
       "암/뇌/심장": "상",
-      성장기특약: "중",
-      부모상담포인트: "상",
+      "성장기 특약": "중",
+      "부모 상담포인트": "상",
     },
   },
   {
@@ -258,7 +294,7 @@ export const productCatalog = [
       장기요양: "상",
       생활비형: "상",
       "재가/시설": "상",
-      고연령접근성: "중",
+      "고연령 접근성": "중",
     },
   },
   {
@@ -276,7 +312,7 @@ export const productCatalog = [
       장기요양: "중",
       생활비형: "상",
       "재가/시설": "중",
-      고연령접근성: "상",
+      "고연령 접근성": "상",
     },
   },
   {
@@ -294,7 +330,7 @@ export const productCatalog = [
       배상책임: "상",
       가재도구: "중",
       "임대인/임차인": "상",
-      실생활활용: "상",
+      "실생활 활용": "상",
     },
   },
   {
@@ -312,43 +348,7 @@ export const productCatalog = [
       배상책임: "상",
       가재도구: "상",
       "임대인/임차인": "중",
-      실생활활용: "중",
+      "실생활 활용": "중",
     },
   },
-];
-
-export const consultationPurposes = [
-  "보장분석",
-  "신규가입",
-  "기존보험 리모델링",
-  "암 대비",
-  "건강종합 대비",
-  "운전자 대비",
-  "자녀보험 상담",
-  "부모님 간병/치매 대비",
-  "화재/생활보장 상담",
-];
-
-export const interestOptions = [
-  "암",
-  "뇌/심장",
-  "수술비",
-  "입원일당",
-  "운전자",
-  "상해",
-  "어린이",
-  "간병/치매",
-  "화재/누수",
-];
-
-export const existingCoverageOptions = [
-  { key: "realLoss", label: "실손 보유" },
-  { key: "cancer", label: "암 진단비 보유" },
-  { key: "brainHeart", label: "뇌/심장 보유" },
-  { key: "surgery", label: "수술비 보유" },
-  { key: "driver", label: "운전자 보유" },
-  { key: "accident", label: "상해 보유" },
-  { key: "child", label: "자녀보험 보유" },
-  { key: "care", label: "간병/치매 보유" },
-  { key: "fire", label: "화재/생활보장 보유" },
 ];
