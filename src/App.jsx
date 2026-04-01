@@ -18,37 +18,6 @@ const STATUS_OPTIONS = [
   { value: "보류", color: "#64748b" },
 ];
 
-const DEFAULT_FORM = {
-  id: null,
-  customerName: "",
-  gender: "남성",
-  age: "",
-  job: "",
-  maritalStatus: "미혼",
-  hasChildren: "없음",
-  driving: "아니오",
-  consultationPurpose: "보장분석",
-  interests: [],
-  existingCoverage: {
-    realLoss: false,
-    cancer: false,
-    brainHeart: false,
-    surgery: false,
-    driver: false,
-    accident: false,
-    child: false,
-    care: false,
-    fire: false,
-  },
-  budget: "",
-  status: "신규",
-  consultDate: todayString(),
-  nextContactDate: "",
-  memo: "",
-  lastModifiedAt: null,
-  createdAt: null,
-};
-
 function todayString() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -87,20 +56,65 @@ function getAgeGroup(age) {
   return "60대";
 }
 
-function levelToScore(level) {
-  if (level === "상") return 3;
-  if (level === "중") return 2;
-  if (level === "하") return 1;
-  return 0;
-}
-
 function normalizeFeatureLabel(label) {
   return label.replace(/\s/g, "");
 }
 
+function loadCustomers() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.error("고객 데이터 로드 실패:", error);
+    return [];
+  }
+}
+
+function saveCustomers(customers) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(customers));
+  } catch (error) {
+    console.error("고객 데이터 저장 실패:", error);
+  }
+}
+
+const DEFAULT_FORM = {
+  id: null,
+  customerName: "",
+  gender: "남성",
+  age: "",
+  job: "",
+  maritalStatus: "미혼",
+  hasChildren: "없음",
+  driving: "아니오",
+  consultationPurpose: "보장분석",
+  interests: [],
+  existingCoverage: {
+    realLoss: false,
+    cancer: false,
+    brainHeart: false,
+    surgery: false,
+    driver: false,
+    accident: false,
+    child: false,
+    care: false,
+    fire: false,
+  },
+  budget: "",
+  status: "신규",
+  consultDate: todayString(),
+  nextContactDate: "",
+  memo: "",
+  lastModifiedAt: null,
+  createdAt: null,
+};
+
 function deriveRecommendations(form) {
   const ageGroup = getAgeGroup(form.age);
   const budget = Number(form.budget || 0);
+
   const scores = {
     health: 0,
     cancer: 0,
@@ -156,7 +170,10 @@ function deriveRecommendations(form) {
     scores.driver += 5;
     gaps.push("운전자 핵심비용 보완 필요");
   }
-  if (!form.existingCoverage.accident && ["건설", "제조", "운송", "자영업"].some((k) => form.job.includes(k))) {
+  if (
+    !form.existingCoverage.accident &&
+    ["건설", "제조", "운송", "자영업"].some((k) => (form.job || "").includes(k))
+  ) {
     scores.accident += 4;
     gaps.push("직업 특성상 상해 보장 보완 필요");
   }
@@ -188,11 +205,22 @@ function deriveRecommendations(form) {
     matchedReasons.push("중대질환 대비 필요도 상승");
   }
 
+  const categoryNameMap = {
+    health: "건강종합",
+    cancer: "암",
+    driver: "운전자",
+    accident: "상해",
+    child: "자녀보험",
+    dementia: "간병/치매",
+    fire: "화재/생활보장",
+  };
+
   const categoryEntries = Object.entries(scores)
     .sort((a, b) => b[1] - a[1])
     .filter(([, score]) => score > 0);
 
   const recommendedCategories = categoryEntries.slice(0, 3).map(([key]) => key);
+  const recommendedCategoryLabels = recommendedCategories.map((key) => categoryNameMap[key] || key);
   const primaryCategory = recommendedCategories[0] || "health";
   const comparisonItems = comparisonTemplates[primaryCategory] || comparisonTemplates.health;
 
@@ -207,9 +235,8 @@ function deriveRecommendations(form) {
       if (budget && budget >= p.minBudget && budget <= p.maxBudget) score += 4;
       if (budget && budget < p.minBudget) score -= 2;
       if (budget && budget > p.maxBudget) score += 1;
-      score += p.strengths.length * 0.4;
       if (p.category === primaryCategory) score += 2;
-
+      score += (p.strengths?.length || 0) * 0.4;
       return { ...p, score };
     })
     .sort((a, b) => b.score - a.score);
@@ -233,7 +260,6 @@ function deriveRecommendations(form) {
       insurerLogo: company?.logo || "",
       insurerColor: company?.color || "#0f172a",
       productName: product.productName,
-      category: product.category,
       note: company?.note || "",
       features: comparisonItems.reduce((acc, item) => {
         const matched = Object.entries(product.features || {}).find(
@@ -261,10 +287,6 @@ function deriveRecommendations(form) {
     budgetSuggestions.push("예산 미입력 상태이므로 핵심담보 우선순위부터 상담하는 것이 좋습니다.");
   }
 
-  if (gaps.length === 0) {
-    gaps.push("기존 보장은 있으나 세부 보장금액/범위 재점검 권장");
-  }
-
   if (recommendedCategories.includes("health")) {
     consultPoints.push("실손 유무와 함께 암/뇌/심장 진단비 및 수술비 밸런스를 점검하세요.");
   }
@@ -287,24 +309,14 @@ function deriveRecommendations(form) {
     consultPoints.push("직업/생활패턴에 따른 상해빈도 차이를 먼저 공감해주는 접근이 좋습니다.");
   }
 
-  const categoryNameMap = {
-    health: "건강종합",
-    cancer: "암",
-    driver: "운전자",
-    accident: "상해",
-    child: "자녀보험",
-    dementia: "간병/치매",
-    fire: "화재/생활보장",
-  };
-
-  const recommendedCategoryLabels = recommendedCategories.map((key) => categoryNameMap[key] || key);
+  const safeGaps = gaps.length ? gaps : ["기존 보장 범위/금액 재점검 권장"];
 
   const script = [
-    `${form.customerName || "고객"}님 기준으로 현재 가장 먼저 점검할 부분은 ${gaps.slice(0, 2).join(", ")} 입니다.`,
+    `${form.customerName || "고객"}님 기준으로 현재 가장 먼저 점검할 부분은 ${safeGaps.slice(0, 2).join(", ")} 입니다.`,
     `상담 목적과 예산을 반영했을 때 ${recommendedCategoryLabels.join(", ")} 중심으로 설계 방향을 잡는 것이 적합합니다.`,
     recommendedInsurerProducts.length
       ? `원수사는 ${recommendedInsurerProducts.map((x) => insurerById(x.insurerId)?.name).join(", ")} 순으로 비교 제안드리면 좋습니다.`
-      : "원수사 비교는 건강/암/운전자 중심으로 우선 진행해보시면 좋습니다.",
+      : "",
     budgetSuggestions[0] || "",
   ]
     .filter(Boolean)
@@ -312,15 +324,14 @@ function deriveRecommendations(form) {
 
   return {
     ageGroup,
-    scores,
     primaryCategory,
+    comparisonItems,
     recommendedCategories,
     recommendedCategoryLabels,
     recommendedInsurerProducts,
     recommendedInsurerNames: recommendedInsurerProducts.map((x) => insurerById(x.insurerId)?.name).filter(Boolean),
-    comparisonItems,
     insurerCompareRows,
-    gaps,
+    gaps: safeGaps,
     consultPoints,
     budgetSuggestions,
     matchedReasons,
@@ -328,151 +339,228 @@ function deriveRecommendations(form) {
   };
 }
 
-function toPrintableHtml(record, rec) {
-  const logo = "/logo.png";
-  const gapItems = rec.gaps.map((x) => `<li>${x}</li>`).join("");
-  const pointItems = rec.consultPoints.map((x) => `<li>${x}</li>`).join("");
-  const budgetItems = rec.budgetSuggestions.map((x) => `<li>${x}</li>`).join("");
-  const compareHead = rec.comparisonItems.map((item) => `<th>${item}</th>`).join("");
-  const compareBody = rec.insurerCompareRows
+function buildConsultReportHtml(record, recommendation) {
+  const gapItems = (recommendation.gaps || []).map((x) => `<li>${x}</li>`).join("");
+  const pointItems = (recommendation.consultPoints || []).map((x) => `<li>${x}</li>`).join("");
+  const budgetItems = (recommendation.budgetSuggestions || []).map((x) => `<li>${x}</li>`).join("");
+  const compareHead = (recommendation.comparisonItems || []).map((item) => `<th>${item}</th>`).join("");
+  const compareBody = (recommendation.insurerCompareRows || [])
     .map(
       (row) => `
-      <tr>
-        <td>${row.insurerName}<br/><span style="font-size:12px;color:#64748b;">${row.productName}</span></td>
-        ${rec.comparisonItems.map((item) => `<td>${row.features[item] || "-"}</td>`).join("")}
-      </tr>
-    `
+        <tr>
+          <td>
+            <div style="font-weight:700;">${row.insurerName}</div>
+            <div style="font-size:12px;color:#64748b;">${row.productName}</div>
+          </td>
+          ${(recommendation.comparisonItems || [])
+            .map((item) => `<td>${row.features?.[item] || "-"}</td>`)
+            .join("")}
+        </tr>
+      `
     )
     .join("");
 
   return `
   <html>
-  <head>
-    <meta charset="utf-8" />
-    <title>유어즈에셋 상담 요약 리포트</title>
-    <style>
-      body { font-family: Arial, "Noto Sans KR", sans-serif; padding: 28px; color: #0f172a; }
-      .top { display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #dbeafe; padding-bottom:16px; margin-bottom:24px; }
-      .title { font-size:28px; font-weight:800; color:#0f172a; }
-      .sub { font-size:13px; color:#64748b; margin-top:4px; }
-      .logo { height:42px; }
-      .grid { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-bottom:16px; }
-      .card { border:1px solid #e2e8f0; border-radius:14px; padding:16px; background:#fff; }
-      .card h3 { margin:0 0 10px; font-size:16px; }
-      .kv { display:grid; grid-template-columns: 120px 1fr; row-gap:8px; column-gap:10px; font-size:14px; }
-      .kv div:nth-child(odd){ color:#64748b; }
-      .badge { display:inline-block; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:700; background:#e2e8f0; }
-      ul { margin:0; padding-left:18px; }
-      li { margin:5px 0; }
-      table { width:100%; border-collapse:collapse; font-size:13px; margin-top:10px; }
-      th, td { border:1px solid #e2e8f0; padding:10px; text-align:center; }
-      th { background:#eff6ff; }
-      .section { margin-top:18px; }
-      .script { white-space:pre-wrap; line-height:1.7; }
-      .memo { white-space:pre-wrap; line-height:1.7; background:#f8fafc; border-radius:12px; padding:14px; border:1px solid #e2e8f0; }
-      @media print {
-        body { padding: 16px; }
-        .card { break-inside: avoid; }
-        table, tr, td, th { break-inside: avoid; }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="top">
-      <div>
-        <div class="title">유어즈에셋 상담 요약 리포트</div>
-        <div class="sub">출력일 ${todayString()}</div>
-      </div>
-      <img class="logo" src="${logo}" />
-    </div>
-
-    <div class="grid">
-      <div class="card">
-        <h3>고객 기본정보</h3>
-        <div class="kv">
-          <div>고객명</div><div>${record.customerName || "-"}</div>
-          <div>성별 / 나이</div><div>${record.gender || "-"} / ${record.age || "-"}</div>
-          <div>직업</div><div>${record.job || "-"}</div>
-          <div>결혼 / 자녀</div><div>${record.maritalStatus || "-"} / ${record.hasChildren || "-"}</div>
-          <div>운전 여부</div><div>${record.driving || "-"}</div>
-          <div>상담 목적</div><div>${record.consultationPurpose || "-"}</div>
-          <div>월 예산</div><div>${record.budget ? `${formatNumber(record.budget)}원` : "-"}</div>
-          <div>진행상태</div><div><span class="badge">${record.status || "-"}</span></div>
+    <head>
+      <meta charset="utf-8" />
+      <title>유어즈에셋 상담 리포트</title>
+      <style>
+        body {
+          font-family: Arial, "Noto Sans KR", sans-serif;
+          color: #0f172a;
+          padding: 28px;
+          background: #ffffff;
+        }
+        .top {
+          display:flex;
+          justify-content:space-between;
+          align-items:center;
+          border-bottom:2px solid #dbeafe;
+          padding-bottom:14px;
+          margin-bottom:22px;
+        }
+        .title {
+          font-size:28px;
+          font-weight:800;
+        }
+        .sub {
+          font-size:13px;
+          color:#64748b;
+          margin-top:6px;
+        }
+        .logo {
+          height:44px;
+          object-fit:contain;
+        }
+        .grid {
+          display:grid;
+          grid-template-columns:1fr 1fr;
+          gap:14px;
+          margin-bottom:16px;
+        }
+        .card {
+          border:1px solid #e2e8f0;
+          border-radius:14px;
+          padding:16px;
+          background:#fff;
+        }
+        .card h3 {
+          margin:0 0 12px;
+          font-size:16px;
+        }
+        .kv {
+          display:grid;
+          grid-template-columns:110px 1fr;
+          row-gap:8px;
+          column-gap:10px;
+          font-size:14px;
+        }
+        .kv div:nth-child(odd) {
+          color:#64748b;
+        }
+        .section {
+          margin-top:16px;
+        }
+        ul {
+          margin:0;
+          padding-left:18px;
+        }
+        li {
+          margin:5px 0;
+          line-height:1.5;
+        }
+        .script, .memo {
+          white-space:pre-wrap;
+          line-height:1.7;
+          background:#f8fafc;
+          border:1px solid #e2e8f0;
+          border-radius:12px;
+          padding:14px;
+        }
+        table {
+          width:100%;
+          border-collapse:collapse;
+          font-size:13px;
+          margin-top:10px;
+        }
+        th, td {
+          border:1px solid #e2e8f0;
+          padding:10px;
+          text-align:center;
+        }
+        th {
+          background:#eff6ff;
+        }
+        .badge {
+          display:inline-block;
+          padding:6px 10px;
+          border-radius:999px;
+          background:#eff6ff;
+          border:1px solid #dbeafe;
+          font-size:12px;
+          font-weight:700;
+        }
+        @media print {
+          body { padding: 14px; }
+          .card, table, tr, td, th { break-inside: avoid; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="top">
+        <div>
+          <div class="title">유어즈에셋 상담 요약 리포트</div>
+          <div class="sub">출력일 ${todayString()}</div>
         </div>
+        <img src="/logo.png" class="logo" />
       </div>
 
-      <div class="card">
-        <h3>상담 일정 / 메모</h3>
-        <div class="kv">
-          <div>상담일자</div><div>${record.consultDate || "-"}</div>
-          <div>다음 연락일</div><div>${record.nextContactDate || "-"}</div>
-          <div>관심 보장</div><div>${(record.interests || []).join(", ") || "-"}</div>
-          <div>추천 상품군</div><div>${rec.recommendedCategoryLabels.join(", ") || "-"}</div>
-          <div>추천 원수사</div><div>${rec.recommendedInsurerNames.join(", ") || "-"}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card section">
-      <h3>부족 담보 / 상담 포인트</h3>
       <div class="grid">
-        <div>
-          <strong>부족 담보</strong>
-          <ul>${gapItems}</ul>
+        <div class="card">
+          <h3>고객 기본정보</h3>
+          <div class="kv">
+            <div>고객명</div><div>${record.customerName || "-"}</div>
+            <div>성별 / 나이</div><div>${record.gender || "-"} / ${record.age || "-"}</div>
+            <div>직업</div><div>${record.job || "-"}</div>
+            <div>결혼 / 자녀</div><div>${record.maritalStatus || "-"} / ${record.hasChildren || "-"}</div>
+            <div>운전 여부</div><div>${record.driving || "-"}</div>
+            <div>상담 목적</div><div>${record.consultationPurpose || "-"}</div>
+            <div>월 예산</div><div>${record.budget ? `${formatNumber(record.budget)}원` : "-"}</div>
+            <div>진행상태</div><div><span class="badge">${record.status || "-"}</span></div>
+          </div>
         </div>
-        <div>
-          <strong>상담 포인트</strong>
-          <ul>${pointItems}</ul>
+
+        <div class="card">
+          <h3>상담 일정 / 추천 요약</h3>
+          <div class="kv">
+            <div>상담일자</div><div>${record.consultDate || "-"}</div>
+            <div>다음 연락일</div><div>${record.nextContactDate || "-"}</div>
+            <div>관심 보장</div><div>${(record.interests || []).join(", ") || "-"}</div>
+            <div>추천 상품군</div><div>${(recommendation.recommendedCategoryLabels || []).join(", ") || "-"}</div>
+            <div>추천 원수사</div><div>${(recommendation.recommendedInsurerNames || []).join(", ") || "-"}</div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="card section">
-      <h3>예산 맞춤 제안</h3>
-      <ul>${budgetItems}</ul>
-    </div>
+      <div class="card section">
+        <h3>부족 담보</h3>
+        <ul>${gapItems || "<li>없음</li>"}</ul>
+      </div>
 
-    <div class="card section">
-      <h3>자동 상담 멘트</h3>
-      <div class="script">${rec.script}</div>
-    </div>
+      <div class="card section">
+        <h3>상담 포인트</h3>
+        <ul>${pointItems || "<li>없음</li>"}</ul>
+      </div>
 
-    <div class="card section">
-      <h3>원수사 비교표</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>원수사 / 상품군</th>
-            ${compareHead}
-          </tr>
-        </thead>
-        <tbody>
-          ${compareBody}
-        </tbody>
-      </table>
-    </div>
+      <div class="card section">
+        <h3>예산 맞춤 제안</h3>
+        <ul>${budgetItems || "<li>없음</li>"}</ul>
+      </div>
 
-    <div class="card section">
-      <h3>상담 메모</h3>
-      <div class="memo">${record.memo || "메모 없음"}</div>
-    </div>
-  </body>
+      <div class="card section">
+        <h3>자동 상담 멘트</h3>
+        <div class="script">${recommendation.script || "-"}</div>
+      </div>
+
+      <div class="card section">
+        <h3>원수사 비교표</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>원수사 / 상품</th>
+              ${compareHead}
+            </tr>
+          </thead>
+          <tbody>
+            ${compareBody || `<tr><td colspan="${(recommendation.comparisonItems || []).length + 1}">비교 데이터 없음</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card section">
+        <h3>상담 메모</h3>
+        <div class="memo">${record.memo || "메모 없음"}</div>
+      </div>
+    </body>
   </html>
   `;
 }
 
-function openPrintWindow(record, rec) {
-  const win = window.open("", "_blank", "width=1200,height=900");
-  if (!win) {
+function printConsultReport(record, recommendation) {
+  const printWindow = window.open("", "_blank", "width=1200,height=900");
+  if (!printWindow) {
     alert("팝업이 차단되어 있습니다. 팝업 허용 후 다시 시도해주세요.");
     return;
   }
-  win.document.open();
-  win.document.write(toPrintableHtml(record, rec));
-  win.document.close();
-  win.focus();
+
+  printWindow.document.open();
+  printWindow.document.write(buildConsultReportHtml(record, recommendation));
+  printWindow.document.close();
+  printWindow.focus();
+
   setTimeout(() => {
-    win.print();
+    printWindow.print();
   }, 500);
 }
 
@@ -484,19 +572,11 @@ export default function App() {
   const [editingId, setEditingId] = useState(null);
 
   useEffect(() => {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setRecords(parsed);
-      } catch (e) {
-        console.error("저장 데이터 로드 실패", e);
-      }
-    }
+    setRecords(loadCustomers());
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    saveCustomers(records);
   }, [records]);
 
   const recommendations = useMemo(() => deriveRecommendations(form), [form]);
@@ -511,6 +591,7 @@ export default function App() {
           item.job?.toLowerCase().includes(keyword) ||
           item.consultationPurpose?.toLowerCase().includes(keyword) ||
           item.memo?.toLowerCase().includes(keyword);
+
         const matchedStatus = statusFilter === "전체" || item.status === statusFilter;
         return matchedKeyword && matchedStatus;
       })
@@ -522,13 +603,12 @@ export default function App() {
   }
 
   function toggleInterest(value) {
-    setForm((prev) => {
-      const exists = prev.interests.includes(value);
-      return {
-        ...prev,
-        interests: exists ? prev.interests.filter((x) => x !== value) : [...prev.interests, value],
-      };
-    });
+    setForm((prev) => ({
+      ...prev,
+      interests: prev.interests.includes(value)
+        ? prev.interests.filter((x) => x !== value)
+        : [...prev.interests, value],
+    }));
   }
 
   function toggleCoverage(key) {
@@ -556,25 +636,23 @@ export default function App() {
     }
 
     const duplicate = records.find(
-      (item) =>
-        item.customerName.trim() === form.customerName.trim() &&
-        item.id !== editingId
+      (item) => item.customerName.trim() === form.customerName.trim() && item.id !== editingId
     );
 
     if (duplicate && !editingId) {
-      const shouldEdit = window.confirm(
-        "같은 고객명이 이미 저장되어 있습니다.\n기존 저장건을 수정하시겠습니까?"
-      );
+      const shouldEdit = window.confirm("같은 고객명이 이미 저장되어 있습니다.\n기존 저장건을 수정하시겠습니까?");
       if (!shouldEdit) return;
 
       const updated = {
         ...duplicate,
         ...form,
         id: duplicate.id,
+        createdAt: duplicate.createdAt || nowISOString(),
         lastModifiedAt: nowISOString(),
       };
 
       setRecords((prev) => prev.map((item) => (item.id === duplicate.id ? updated : item)));
+      setForm(updated);
       setEditingId(duplicate.id);
       alert("기존 고객 저장건을 수정했습니다.");
       return;
@@ -588,6 +666,7 @@ export default function App() {
         lastModifiedAt: nowISOString(),
       };
       setRecords((prev) => prev.map((item) => (item.id === editingId ? updated : item)));
+      setForm(updated);
       alert("저장건을 수정했습니다.");
       return;
     }
@@ -600,8 +679,8 @@ export default function App() {
     };
 
     setRecords((prev) => [newRecord, ...prev]);
-    setEditingId(newRecord.id);
     setForm(newRecord);
+    setEditingId(newRecord.id);
     alert("상담결과를 저장했습니다.");
   }
 
@@ -609,11 +688,11 @@ export default function App() {
     setForm({
       ...DEFAULT_FORM,
       ...record,
+      interests: Array.isArray(record.interests) ? record.interests : [],
       existingCoverage: {
         ...DEFAULT_FORM.existingCoverage,
         ...(record.existingCoverage || {}),
       },
-      interests: Array.isArray(record.interests) ? record.interests : [],
     });
     setEditingId(record.id);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -634,26 +713,40 @@ export default function App() {
       <style>{`
         * { box-sizing: border-box; }
         body { margin: 0; background: #f5f7fb; color: #0f172a; font-family: "Noto Sans KR", Arial, sans-serif; }
-        .ya-wrap { min-height: 100vh; background:
-          radial-gradient(circle at top right, rgba(29, 78, 216, 0.08), transparent 26%),
-          linear-gradient(180deg, #f8fbff 0%, #f5f7fb 100%);
+        .ya-wrap {
+          min-height: 100vh;
+          background:
+            radial-gradient(circle at top right, rgba(29, 78, 216, 0.08), transparent 26%),
+            linear-gradient(180deg, #f8fbff 0%, #f5f7fb 100%);
           padding: 20px;
         }
         .container { max-width: 1500px; margin: 0 auto; }
         .header {
           background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #1d4ed8 100%);
-          color: white; border-radius: 22px; padding: 22px; display:flex; justify-content:space-between; gap:20px; align-items:center;
+          color: white;
+          border-radius: 22px;
+          padding: 22px;
+          display:flex;
+          justify-content:space-between;
+          gap:20px;
+          align-items:center;
           box-shadow: 0 20px 50px rgba(15,23,42,0.18);
         }
         .header-left { display:flex; align-items:center; gap:16px; }
-        .logo-box { width:64px; height:64px; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.18); border-radius:18px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+        .logo-box {
+          width:64px; height:64px; background:rgba(255,255,255,0.12);
+          border:1px solid rgba(255,255,255,0.18);
+          border-radius:18px; display:flex; align-items:center; justify-content:center; overflow:hidden;
+        }
         .logo-box img { width:100%; height:100%; object-fit:contain; padding:10px; }
         .title { font-size:28px; font-weight:900; margin-bottom:6px; }
         .subtitle { font-size:14px; opacity:0.88; }
         .stat-grid { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:12px; min-width: 350px; }
         .stat-card {
-          background: rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.14);
-          border-radius:16px; padding:14px;
+          background: rgba(255,255,255,0.12);
+          border:1px solid rgba(255,255,255,0.14);
+          border-radius:16px;
+          padding:14px;
         }
         .stat-label { font-size:12px; opacity:0.86; margin-bottom:6px; }
         .stat-value { font-size:24px; font-weight:800; }
@@ -662,47 +755,81 @@ export default function App() {
           background:#fff; border:1px solid #e2e8f0; border-radius:20px; padding:18px;
           box-shadow: 0 10px 30px rgba(15,23,42,0.05);
         }
-        .card-title { font-size:18px; font-weight:800; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+        .card-title {
+          font-size:18px; font-weight:800; margin-bottom:14px;
+          display:flex; align-items:center; justify-content:space-between; gap:12px;
+        }
         .section-title { font-size:15px; font-weight:800; margin:18px 0 10px; color:#0f172a; }
-        .form-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:12px; }
         .form-grid-3 { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:12px; }
         .field { display:flex; flex-direction:column; gap:6px; }
         .field label { font-size:13px; font-weight:700; color:#334155; }
         .input, .select, .textarea {
-          width:100%; border:1px solid #dbe3ef; border-radius:14px; background:#fff;
-          padding:12px 14px; font-size:14px; outline:none; transition: all .2s ease;
+          width:100%;
+          border:1px solid #dbe3ef;
+          border-radius:14px;
+          background:#fff;
+          padding:12px 14px;
+          font-size:14px;
+          outline:none;
         }
-        .input:focus, .select:focus, .textarea:focus { border-color:#3b82f6; box-shadow:0 0 0 4px rgba(59,130,246,0.12); }
+        .input:focus, .select:focus, .textarea:focus {
+          border-color:#3b82f6;
+          box-shadow:0 0 0 4px rgba(59,130,246,0.12);
+        }
         .textarea { min-height:120px; resize:vertical; }
         .chips { display:flex; flex-wrap:wrap; gap:8px; }
         .chip {
-          border:1px solid #dbe3ef; background:#f8fafc; color:#334155;
-          border-radius:999px; padding:9px 12px; font-size:13px; font-weight:700;
-          cursor:pointer; user-select:none;
+          border:1px solid #dbe3ef;
+          background:#f8fafc;
+          color:#334155;
+          border-radius:999px;
+          padding:9px 12px;
+          font-size:13px;
+          font-weight:700;
+          cursor:pointer;
         }
         .chip.active { background:#dbeafe; color:#1d4ed8; border-color:#93c5fd; }
         .badge {
-          display:inline-flex; align-items:center; gap:6px;
-          padding:7px 11px; border-radius:999px; font-size:12px; font-weight:800;
-          color:#0f172a; background:#eff6ff; border:1px solid #dbeafe;
+          display:inline-flex;
+          align-items:center;
+          gap:6px;
+          padding:7px 11px;
+          border-radius:999px;
+          font-size:12px;
+          font-weight:800;
+          color:#0f172a;
+          background:#eff6ff;
+          border:1px solid #dbeafe;
         }
         .status-badge {
-          display:inline-flex; align-items:center; justify-content:center;
-          min-width:74px; padding:7px 10px; border-radius:999px; font-size:12px; font-weight:800; color:#fff;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          min-width:74px;
+          padding:7px 10px;
+          border-radius:999px;
+          font-size:12px;
+          font-weight:800;
+          color:#fff;
         }
         .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
         .btn {
-          border:none; border-radius:14px; padding:12px 16px; font-size:14px; font-weight:800;
-          cursor:pointer; transition:transform .15s ease, opacity .15s ease;
+          border:none;
+          border-radius:14px;
+          padding:12px 16px;
+          font-size:14px;
+          font-weight:800;
+          cursor:pointer;
         }
-        .btn:hover { transform: translateY(-1px); }
         .btn-primary { background:linear-gradient(135deg, #1d4ed8, #2563eb); color:#fff; }
         .btn-dark { background:#0f172a; color:#fff; }
         .btn-soft { background:#eff6ff; color:#1d4ed8; }
-        .btn-gray { background:#f1f5f9; color:#334155; }
         .summary-grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:14px; }
         .summary-box {
-          border:1px solid #e2e8f0; border-radius:18px; padding:14px; background:linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+          border:1px solid #e2e8f0;
+          border-radius:18px;
+          padding:14px;
+          background:linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
         }
         .summary-box h4 { margin:0 0 10px; font-size:14px; }
         .summary-box ul { margin:0; padding-left:18px; }
@@ -710,54 +837,79 @@ export default function App() {
         .table-wrap { overflow:auto; border:1px solid #e2e8f0; border-radius:18px; }
         table { width:100%; border-collapse:collapse; min-width:900px; }
         th, td { padding:12px 10px; border-bottom:1px solid #eef2f7; text-align:center; font-size:13px; }
-        th { background:#eff6ff; color:#1e3a8a; font-weight:800; position:sticky; top:0; z-index:1; }
+        th { background:#eff6ff; color:#1e3a8a; font-weight:800; }
         .list-toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:14px; }
-        .list {
-          display:grid; gap:12px; max-height: 920px; overflow:auto; padding-right:4px;
-        }
+        .list { display:grid; gap:12px; max-height:920px; overflow:auto; padding-right:4px; }
         .customer-item {
-          border:1px solid #e2e8f0; border-radius:18px; padding:14px;
-          background:#fff; transition:.18s ease; cursor:pointer;
+          border:1px solid #e2e8f0;
+          border-radius:18px;
+          padding:14px;
+          background:#fff;
         }
-        .customer-item:hover { box-shadow:0 10px 24px rgba(15,23,42,0.08); border-color:#bfdbfe; }
-        .customer-top { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
         .customer-name { font-size:17px; font-weight:800; margin-bottom:4px; }
         .customer-meta { font-size:13px; color:#64748b; line-height:1.6; }
         .customer-tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
-        .highlight-complete { border:2px solid rgba(22,163,74,0.22); background:linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%); }
-        .highlight-progress { border:2px solid rgba(245,158,11,0.20); background:linear-gradient(180deg, #ffffff 0%, #fffaf0 100%); }
-        .small-actions { display:flex; gap:8px; margin-top:12px; }
+        .highlight-complete {
+          border:2px solid rgba(22,163,74,0.22);
+          background:linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
+        }
+        .highlight-progress {
+          border:2px solid rgba(245,158,11,0.20);
+          background:linear-gradient(180deg, #ffffff 0%, #fffaf0 100%);
+        }
+        .small-actions { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
         .tiny-btn {
-          border:none; border-radius:12px; padding:8px 10px; font-size:12px; font-weight:800; cursor:pointer;
+          border:none;
+          border-radius:12px;
+          padding:8px 10px;
+          font-size:12px;
+          font-weight:800;
+          cursor:pointer;
         }
         .tiny-soft { background:#eff6ff; color:#1d4ed8; }
         .tiny-danger { background:#fef2f2; color:#dc2626; }
         .inline-grid { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:10px; }
         .kpi-card {
-          border:1px solid #e2e8f0; border-radius:16px; padding:12px; background:#fff;
+          border:1px solid #e2e8f0;
+          border-radius:16px;
+          padding:12px;
+          background:#fff;
         }
         .kpi-label { font-size:12px; color:#64748b; margin-bottom:6px; }
         .kpi-value { font-size:20px; font-weight:800; }
         .recommend-head { display:flex; flex-wrap:wrap; gap:8px; }
         .company-cell { display:flex; align-items:center; gap:10px; justify-content:flex-start; min-width:170px; }
-        .company-logo { width:34px; height:34px; border-radius:10px; border:1px solid #e2e8f0; object-fit:contain; background:#fff; padding:4px; }
+        .company-logo {
+          width:34px; height:34px; border-radius:10px; border:1px solid #e2e8f0;
+          object-fit:contain; background:#fff; padding:4px;
+        }
         .script-box {
-          white-space:pre-wrap; line-height:1.8; background:#f8fafc; border:1px solid #e2e8f0;
-          border-radius:16px; padding:14px; font-size:14px;
+          white-space:pre-wrap;
+          line-height:1.8;
+          background:#f8fafc;
+          border:1px solid #e2e8f0;
+          border-radius:16px;
+          padding:14px;
+          font-size:14px;
         }
         .muted { color:#64748b; font-size:13px; }
-        .empty { padding:24px; text-align:center; color:#64748b; border:1px dashed #cbd5e1; border-radius:18px; background:#fafcff; }
+        .empty {
+          padding:24px;
+          text-align:center;
+          color:#64748b;
+          border:1px dashed #cbd5e1;
+          border-radius:18px;
+          background:#fafcff;
+        }
         @media (max-width: 1200px) {
           .main-grid { grid-template-columns: 1fr; }
-          .stat-grid { min-width: auto; width:100%; }
         }
         @media (max-width: 760px) {
           .ya-wrap { padding:12px; }
           .header { flex-direction:column; align-items:flex-start; }
-          .form-grid, .form-grid-3, .summary-grid, .inline-grid { grid-template-columns: 1fr; }
-          .card { padding:14px; }
+          .form-grid-3, .summary-grid, .inline-grid { grid-template-columns: 1fr; }
           .title { font-size:22px; }
-          .stat-grid { grid-template-columns: 1fr 1fr; }
+          .stat-grid { grid-template-columns: 1fr 1fr; min-width:auto; width:100%; }
         }
       `}</style>
 
@@ -769,9 +921,7 @@ export default function App() {
             </div>
             <div>
               <div className="title">유어즈에셋 설계사 포털</div>
-              <div className="subtitle">
-                CRM · 고객입력형 추천 · 원수사 비교 · 상담 리포트 출력
-              </div>
+              <div className="subtitle">CRM · 고객추천 · 비교실 · 상담 리포트 출력</div>
             </div>
           </div>
 
@@ -796,21 +946,14 @@ export default function App() {
             <div className="card">
               <div className="card-title">
                 <span>고객 입력 / 상담 관리</span>
-                <div className="badge">
-                  {editingId ? "수정 모드" : "신규 입력"}
-                </div>
+                <div className="badge">{editingId ? "수정 모드" : "신규 입력"}</div>
               </div>
 
               <div className="section-title">기본 정보</div>
               <div className="form-grid-3">
                 <div className="field">
                   <label>고객명</label>
-                  <input
-                    className="input"
-                    value={form.customerName}
-                    onChange={(e) => updateField("customerName", e.target.value)}
-                    placeholder="예: 김OO"
-                  />
+                  <input className="input" value={form.customerName} onChange={(e) => updateField("customerName", e.target.value)} />
                 </div>
                 <div className="field">
                   <label>성별</label>
@@ -821,44 +964,25 @@ export default function App() {
                 </div>
                 <div className="field">
                   <label>나이</label>
-                  <input
-                    className="input"
-                    type="number"
-                    value={form.age}
-                    onChange={(e) => updateField("age", e.target.value)}
-                    placeholder="예: 45"
-                  />
+                  <input className="input" type="number" value={form.age} onChange={(e) => updateField("age", e.target.value)} />
                 </div>
               </div>
 
               <div className="form-grid-3" style={{ marginTop: 12 }}>
                 <div className="field">
                   <label>직업</label>
-                  <input
-                    className="input"
-                    value={form.job}
-                    onChange={(e) => updateField("job", e.target.value)}
-                    placeholder="예: 사무직 / 자영업 / 건설"
-                  />
+                  <input className="input" value={form.job} onChange={(e) => updateField("job", e.target.value)} />
                 </div>
                 <div className="field">
                   <label>결혼 여부</label>
-                  <select
-                    className="select"
-                    value={form.maritalStatus}
-                    onChange={(e) => updateField("maritalStatus", e.target.value)}
-                  >
+                  <select className="select" value={form.maritalStatus} onChange={(e) => updateField("maritalStatus", e.target.value)}>
                     <option>미혼</option>
                     <option>기혼</option>
                   </select>
                 </div>
                 <div className="field">
                   <label>자녀 여부</label>
-                  <select
-                    className="select"
-                    value={form.hasChildren}
-                    onChange={(e) => updateField("hasChildren", e.target.value)}
-                  >
+                  <select className="select" value={form.hasChildren} onChange={(e) => updateField("hasChildren", e.target.value)}>
                     <option>없음</option>
                     <option>있음</option>
                   </select>
@@ -875,25 +999,13 @@ export default function App() {
                 </div>
                 <div className="field">
                   <label>상담 목적</label>
-                  <select
-                    className="select"
-                    value={form.consultationPurpose}
-                    onChange={(e) => updateField("consultationPurpose", e.target.value)}
-                  >
-                    {consultationPurposes.map((item) => (
-                      <option key={item}>{item}</option>
-                    ))}
+                  <select className="select" value={form.consultationPurpose} onChange={(e) => updateField("consultationPurpose", e.target.value)}>
+                    {consultationPurposes.map((item) => <option key={item}>{item}</option>)}
                   </select>
                 </div>
                 <div className="field">
                   <label>월보험료 예산</label>
-                  <input
-                    className="input"
-                    type="number"
-                    value={form.budget}
-                    onChange={(e) => updateField("budget", e.target.value)}
-                    placeholder="예: 80000"
-                  />
+                  <input className="input" type="number" value={form.budget} onChange={(e) => updateField("budget", e.target.value)} />
                 </div>
               </div>
 
@@ -930,51 +1042,28 @@ export default function App() {
                 <div className="field">
                   <label>상담 진행상태</label>
                   <select className="select" value={form.status} onChange={(e) => updateField("status", e.target.value)}>
-                    {STATUS_OPTIONS.map((status) => (
-                      <option key={status.value}>{status.value}</option>
-                    ))}
+                    {STATUS_OPTIONS.map((status) => <option key={status.value}>{status.value}</option>)}
                   </select>
                 </div>
                 <div className="field">
                   <label>상담일자</label>
-                  <input
-                    className="input"
-                    type="date"
-                    value={form.consultDate}
-                    onChange={(e) => updateField("consultDate", e.target.value)}
-                  />
+                  <input className="input" type="date" value={form.consultDate} onChange={(e) => updateField("consultDate", e.target.value)} />
                 </div>
                 <div className="field">
                   <label>다음 연락일</label>
-                  <input
-                    className="input"
-                    type="date"
-                    value={form.nextContactDate}
-                    onChange={(e) => updateField("nextContactDate", e.target.value)}
-                  />
+                  <input className="input" type="date" value={form.nextContactDate} onChange={(e) => updateField("nextContactDate", e.target.value)} />
                 </div>
               </div>
 
               <div className="field" style={{ marginTop: 12 }}>
                 <label>상담 메모</label>
-                <textarea
-                  className="textarea"
-                  value={form.memo}
-                  onChange={(e) => updateField("memo", e.target.value)}
-                  placeholder="고객 반응 / 제안 방향 / 다음 상담 포인트 입력"
-                />
+                <textarea className="textarea" value={form.memo} onChange={(e) => updateField("memo", e.target.value)} />
               </div>
 
               <div className="actions">
-                <button className="btn btn-primary" onClick={saveRecord}>
-                  {editingId ? "저장건 수정" : "상담결과 저장"}
-                </button>
-                <button className="btn btn-dark" onClick={() => openPrintWindow(form, recommendations)}>
-                  PDF 저장 / 출력
-                </button>
-                <button className="btn btn-soft" onClick={resetForm}>
-                  신규 입력 초기화
-                </button>
+                <button className="btn btn-primary" onClick={saveRecord}>{editingId ? "저장건 수정" : "상담결과 저장"}</button>
+                <button className="btn btn-dark" onClick={() => printConsultReport(form, recommendations)}>PDF 저장 / 출력</button>
+                <button className="btn btn-soft" onClick={resetForm}>신규 입력 초기화</button>
               </div>
             </div>
 
@@ -982,9 +1071,7 @@ export default function App() {
               <div className="card-title">
                 <span>자동 추천 결과</span>
                 <div className="recommend-head">
-                  {recommendations.recommendedCategoryLabels.map((item) => (
-                    <span key={item} className="badge">{item}</span>
-                  ))}
+                  {recommendations.recommendedCategoryLabels.map((item) => <span key={item} className="badge">{item}</span>)}
                 </div>
               </div>
 
@@ -1010,35 +1097,22 @@ export default function App() {
               <div className="summary-grid" style={{ marginTop: 14 }}>
                 <div className="summary-box">
                   <h4>부족 담보 자동 표시</h4>
-                  <ul>
-                    {recommendations.gaps.map((item, idx) => <li key={idx}>{item}</li>)}
-                  </ul>
+                  <ul>{recommendations.gaps.map((item, idx) => <li key={idx}>{item}</li>)}</ul>
                 </div>
-
                 <div className="summary-box">
                   <h4>상담 포인트</h4>
-                  <ul>
-                    {recommendations.consultPoints.map((item, idx) => <li key={idx}>{item}</li>)}
-                  </ul>
+                  <ul>{recommendations.consultPoints.map((item, idx) => <li key={idx}>{item}</li>)}</ul>
                 </div>
-
                 <div className="summary-box">
                   <h4>예산 맞춤 제안</h4>
-                  <ul>
-                    {recommendations.budgetSuggestions.map((item, idx) => <li key={idx}>{item}</li>)}
-                  </ul>
+                  <ul>{recommendations.budgetSuggestions.map((item, idx) => <li key={idx}>{item}</li>)}</ul>
                 </div>
-
                 <div className="summary-box">
                   <h4>추천 원수사</h4>
                   <ul>
                     {recommendations.recommendedInsurerProducts.map((item) => {
                       const company = insurerById(item.insurerId);
-                      return (
-                        <li key={item.id}>
-                          <strong>{company?.name || item.insurerId}</strong> · {item.productName}
-                        </li>
-                      );
+                      return <li key={item.id}><strong>{company?.name || item.insurerId}</strong> · {item.productName}</li>;
                     })}
                   </ul>
                 </div>
@@ -1051,9 +1125,7 @@ export default function App() {
             <div className="card" style={{ marginTop: 18 }}>
               <div className="card-title">
                 <span>원수사 비교실</span>
-                <span className="muted">
-                  상품군: {recommendations.recommendedCategoryLabels[0] || "-"} / 비교 항목 자동 변경
-                </span>
+                <span className="muted">상품군: {recommendations.recommendedCategoryLabels[0] || "-"} / 비교 항목 자동 변경</span>
               </div>
 
               <div className="table-wrap">
@@ -1061,9 +1133,7 @@ export default function App() {
                   <thead>
                     <tr>
                       <th style={{ minWidth: 220 }}>원수사 / 상품</th>
-                      {recommendations.comparisonItems.map((item) => (
-                        <th key={item}>{item}</th>
-                      ))}
+                      {recommendations.comparisonItems.map((item) => <th key={item}>{item}</th>)}
                     </tr>
                   </thead>
                   <tbody>
@@ -1075,9 +1145,7 @@ export default function App() {
                               className="company-logo"
                               src={row.insurerLogo}
                               alt={row.insurerName}
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                              }}
+                              onError={(e) => { e.currentTarget.style.display = "none"; }}
                             />
                             <div>
                               <div style={{ fontWeight: 800 }}>{row.insurerName}</div>
@@ -1085,16 +1153,12 @@ export default function App() {
                             </div>
                           </div>
                         </td>
-                        {recommendations.comparisonItems.map((item) => (
-                          <td key={item}>{row.features[item] || "-"}</td>
-                        ))}
+                        {recommendations.comparisonItems.map((item) => <td key={item}>{row.features[item] || "-"}</td>)}
                       </tr>
                     ))}
-                    {!recommendations.insurerCompareRows.length && (
+                    {recommendations.insurerCompareRows.length === 0 && (
                       <tr>
-                        <td colSpan={recommendations.comparisonItems.length + 1}>
-                          비교 가능한 추천 원수사가 없습니다.
-                        </td>
+                        <td colSpan={recommendations.comparisonItems.length + 1}>비교 가능한 추천 원수사가 없습니다.</td>
                       </tr>
                     )}
                   </tbody>
@@ -1120,9 +1184,7 @@ export default function App() {
                 />
                 <select className="select" style={{ width: 150 }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                   <option>전체</option>
-                  {STATUS_OPTIONS.map((item) => (
-                    <option key={item.value}>{item.value}</option>
-                  ))}
+                  {STATUS_OPTIONS.map((item) => <option key={item.value}>{item.value}</option>)}
                 </select>
               </div>
 
@@ -1141,39 +1203,25 @@ export default function App() {
 
                     return (
                       <div key={item.id} className={itemClass}>
-                        <div className="customer-top">
-                          <div onClick={() => loadRecord(item)} style={{ flex: 1 }}>
-                            <div className="customer-name">{item.customerName}</div>
-                            <div className="customer-meta">
-                              {item.gender} / {item.age || "-"}세 / {item.job || "-"}<br />
-                              상담목적: {item.consultationPurpose || "-"} · 예산: {item.budget ? `${formatNumber(item.budget)}원` : "-"}<br />
-                              상담일: {item.consultDate || "-"} · 다음연락일: {item.nextContactDate || "-"}
-                            </div>
+                        <div onClick={() => loadRecord(item)} style={{ cursor: "pointer" }}>
+                          <div className="customer-name">{item.customerName}</div>
+                          <div className="customer-meta">
+                            {item.gender} / {item.age || "-"}세 / {item.job || "-"}<br />
+                            상담목적: {item.consultationPurpose || "-"} · 예산: {item.budget ? `${formatNumber(item.budget)}원` : "-"}<br />
+                            상담일: {item.consultDate || "-"} · 다음연락일: {item.nextContactDate || "-"}
+                          </div>
 
-                            <div className="customer-tags">
-                              <span className="status-badge" style={{ background: statusColor(item.status) }}>
-                                {item.status}
-                              </span>
-                              {(rec.recommendedCategoryLabels || []).slice(0, 2).map((tag) => (
-                                <span key={tag} className="badge">{tag}</span>
-                              ))}
-                              {rec.recommendedInsurerNames.slice(0, 1).map((tag) => (
-                                <span key={tag} className="badge">{tag}</span>
-                              ))}
-                            </div>
+                          <div className="customer-tags">
+                            <span className="status-badge" style={{ background: statusColor(item.status) }}>{item.status}</span>
+                            {rec.recommendedCategoryLabels.slice(0, 2).map((tag) => <span key={tag} className="badge">{tag}</span>)}
+                            {rec.recommendedInsurerNames.slice(0, 1).map((tag) => <span key={tag} className="badge">{tag}</span>)}
                           </div>
                         </div>
 
                         <div className="small-actions">
-                          <button className="tiny-btn tiny-soft" onClick={() => loadRecord(item)}>
-                            불러오기 / 수정
-                          </button>
-                          <button className="tiny-btn tiny-soft" onClick={() => openPrintWindow(item, rec)}>
-                            PDF 출력
-                          </button>
-                          <button className="tiny-btn tiny-danger" onClick={() => deleteRecord(item.id)}>
-                            삭제
-                          </button>
+                          <button className="tiny-btn tiny-soft" onClick={() => loadRecord(item)}>불러오기 / 수정</button>
+                          <button className="tiny-btn tiny-soft" onClick={() => printConsultReport(item, rec)}>PDF 출력</button>
+                          <button className="tiny-btn tiny-danger" onClick={() => deleteRecord(item.id)}>삭제</button>
                         </div>
                       </div>
                     );
