@@ -1,1237 +1,1265 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { insurers } from "./data/insurers";
-import {
-  comparisonTemplates,
-  consultationPurposes,
-  existingCoverageOptions,
-  interestOptions,
-  productCatalog,
-} from "./data/products";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+import { insurers, insurerMap } from "./data/insurers";
+import { products } from "./data/products";
 
 const STORAGE_KEY = "yoursasset_portal_customers_v3";
 
-const STATUS_OPTIONS = [
-  { value: "신규", color: "#2563eb" },
-  { value: "상담중", color: "#f59e0b" },
-  { value: "제안완료", color: "#8b5cf6" },
-  { value: "계약완료", color: "#16a34a" },
-  { value: "보류", color: "#64748b" },
+const initialForm = {
+  customerName: "",
+  gender: "무관",
+  ageGroup: "40대",
+  occupation: "",
+  monthlyBudget: 100000,
+  needs: ["암", "뇌", "심장"],
+  currentContractsText: "",
+  currentCoverages: [],
+  memo: "",
+};
+
+const needOptions = [
+  "암",
+  "뇌",
+  "심장",
+  "입원",
+  "수술",
+  "후유장해",
+  "간병",
+  "생활비",
+  "여성질환",
+  "장기요양",
 ];
 
-function todayString() {
+const coverageOptions = [
+  "암",
+  "뇌",
+  "심장",
+  "입원",
+  "수술",
+  "후유장해",
+  "간병",
+  "생활비",
+  "실손",
+];
+
+function currency(value) {
+  return Number(value || 0).toLocaleString("ko-KR");
+}
+
+function getToday() {
   const d = new Date();
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+  return `${yyyy}.${mm}.${dd}`;
 }
 
-function nowISOString() {
-  return new Date().toISOString();
+function scoreProduct(product, form) {
+  let score = 0;
+
+  if (product.suitableFor.includes(form.ageGroup)) score += 20;
+  if (product.genders.includes(form.gender) || product.genders.includes("무관")) score += 15;
+
+  const [minBudget, maxBudget] = product.monthlyBudgetRange;
+  const budget = Number(form.monthlyBudget || 0);
+
+  if (budget >= minBudget && budget <= maxBudget) score += 25;
+  else if (budget >= minBudget * 0.8 && budget <= maxBudget * 1.2) score += 10;
+
+  const needMatch = product.targetNeeds.filter((need) => form.needs.includes(need)).length;
+  score += needMatch * 10;
+
+  const missingCoverageCount = product.missingCoverageRules.filter(
+    (item) => !form.currentCoverages.includes(item)
+  ).length;
+  score += missingCoverageCount * 5;
+
+  return score;
 }
 
-function uid() {
-  return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+function getTopProducts(form) {
+  return [...products]
+    .map((product) => ({
+      ...product,
+      matchScore: scoreProduct(product, form),
+    }))
+    .sort((a, b) => b.matchScore - a.matchScore)
+    .slice(0, 3);
 }
 
-function formatNumber(value) {
-  if (value === "" || value === null || value === undefined) return "-";
-  return Number(value).toLocaleString("ko-KR");
+function getMissingCoverages(form) {
+  const priority = ["암", "뇌", "심장", "후유장해", "간병", "입원", "수술", "생활비"];
+  return priority.filter((item) => !form.currentCoverages.includes(item));
 }
 
-function statusColor(status) {
-  return STATUS_OPTIONS.find((s) => s.value === status)?.color || "#64748b";
+function buildConsultSummary(form, recommendedProduct, missingCoverages) {
+  const name = form.customerName || "고객";
+  const mainNeeds = form.needs.slice(0, 3).join(", ");
+  const topMissing = missingCoverages.slice(0, 3).join(", ");
+
+  return [
+    `${name}님은 현재 ${form.ageGroup} / ${form.gender} 기준으로 ${mainNeeds || "핵심 보장"} 니즈가 우선으로 보입니다.`,
+    missingCoverages.length
+      ? `기존 계약 분석상 ${topMissing} 관련 보장이 상대적으로 부족해 보완 상담 포인트가 분명합니다.`
+      : `기존 계약의 주요 골격은 갖춰져 있으나, 세부 특약과 한도 조정 중심 점검이 필요합니다.`,
+    `이번 상담에서는 '${recommendedProduct?.name || "추천 플랜"}' 중심으로 보험료 예산 ${currency(
+      form.monthlyBudget
+    )}원 범위 내에서 실무형 비교설계를 진행하는 흐름이 적합합니다.`,
+  ];
 }
 
-function insurerById(id) {
-  return insurers.find((x) => x.id === id);
-}
-
-function getAgeGroup(age) {
-  const a = Number(age || 0);
-  if (a < 30) return "20대";
-  if (a < 40) return "30대";
-  if (a < 50) return "40대";
-  if (a < 60) return "50대";
-  return "60대";
-}
-
-function normalizeFeatureLabel(label) {
-  return label.replace(/\s/g, "");
-}
-
-function loadCustomers() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error("고객 데이터 로드 실패:", error);
-    return [];
-  }
-}
-
-function saveCustomers(customers) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(customers));
-  } catch (error) {
-    console.error("고객 데이터 저장 실패:", error);
-  }
-}
-
-const DEFAULT_FORM = {
-  id: null,
-  customerName: "",
-  gender: "남성",
-  age: "",
-  job: "",
-  maritalStatus: "미혼",
-  hasChildren: "없음",
-  driving: "아니오",
-  consultationPurpose: "보장분석",
-  interests: [],
-  existingCoverage: {
-    realLoss: false,
-    cancer: false,
-    brainHeart: false,
-    surgery: false,
-    driver: false,
-    accident: false,
-    child: false,
-    care: false,
-    fire: false,
-  },
-  budget: "",
-  status: "신규",
-  consultDate: todayString(),
-  nextContactDate: "",
-  memo: "",
-  lastModifiedAt: null,
-  createdAt: null,
-};
-
-function deriveRecommendations(form) {
-  const ageGroup = getAgeGroup(form.age);
-  const budget = Number(form.budget || 0);
-
-  const scores = {
-    health: 0,
-    cancer: 0,
-    driver: 0,
-    accident: 0,
-    child: 0,
-    dementia: 0,
-    fire: 0,
-  };
-
-  const gaps = [];
-  const consultPoints = [];
-  const budgetSuggestions = [];
-  const matchedReasons = [];
-
-  if (form.consultationPurpose === "보장분석") scores.health += 3;
-  if (form.consultationPurpose === "신규가입") scores.health += 2;
-  if (form.consultationPurpose === "기존보험 리모델링") scores.health += 3;
-  if (form.consultationPurpose === "암 대비") scores.cancer += 5;
-  if (form.consultationPurpose === "건강종합 대비") scores.health += 5;
-  if (form.consultationPurpose === "운전자 대비") scores.driver += 5;
-  if (form.consultationPurpose === "자녀보험 상담") scores.child += 5;
-  if (form.consultationPurpose === "부모님 간병/치매 대비") scores.dementia += 5;
-  if (form.consultationPurpose === "화재/생활보장 상담") scores.fire += 5;
-
-  if (form.interests.includes("암")) scores.cancer += 4;
-  if (form.interests.includes("뇌/심장")) scores.health += 4;
-  if (form.interests.includes("수술비")) scores.health += 3;
-  if (form.interests.includes("입원일당")) scores.health += 2;
-  if (form.interests.includes("운전자")) scores.driver += 4;
-  if (form.interests.includes("상해")) scores.accident += 4;
-  if (form.interests.includes("어린이")) scores.child += 4;
-  if (form.interests.includes("간병/치매")) scores.dementia += 4;
-  if (form.interests.includes("화재/누수")) scores.fire += 4;
-
-  if (!form.existingCoverage.realLoss) {
-    scores.health += 3;
-    gaps.push("실손/기초 의료보장 점검 필요");
-  }
-  if (!form.existingCoverage.cancer) {
-    scores.cancer += 4;
-    gaps.push("암 진단비/치료비 보완 필요");
-  }
-  if (!form.existingCoverage.brainHeart) {
-    scores.health += 3;
-    gaps.push("뇌/심장 핵심진단비 점검 필요");
-  }
-  if (!form.existingCoverage.surgery) {
-    scores.health += 2;
-    gaps.push("수술비/입원일당 계열 보완 필요");
-  }
-  if (form.driving === "예" && !form.existingCoverage.driver) {
-    scores.driver += 5;
-    gaps.push("운전자 핵심비용 보완 필요");
-  }
-  if (
-    !form.existingCoverage.accident &&
-    ["건설", "제조", "운송", "자영업"].some((k) => (form.job || "").includes(k))
-  ) {
-    scores.accident += 4;
-    gaps.push("직업 특성상 상해 보장 보완 필요");
-  }
-  if (form.hasChildren === "있음" && !form.existingCoverage.child) {
-    scores.child += 3;
-    gaps.push("자녀 관련 보장 상담 니즈 가능");
-  }
-  if (Number(form.age || 0) >= 50 && !form.existingCoverage.care) {
-    scores.dementia += 4;
-    gaps.push("50대 이상 간병/치매 대비 필요");
-  }
-  if (!form.existingCoverage.fire && (form.maritalStatus === "기혼" || form.hasChildren === "있음")) {
-    scores.fire += 2;
-    gaps.push("가정 단위 화재/생활배상 점검 필요");
-  }
-
-  if (form.maritalStatus === "기혼") {
-    scores.health += 1;
-    scores.fire += 1;
-    matchedReasons.push("가정 단위 보장 점검 필요");
-  }
-  if (form.hasChildren === "있음") {
-    scores.child += 2;
-    matchedReasons.push("자녀 관련 상담 확장 가능");
-  }
-  if (Number(form.age || 0) >= 45) {
-    scores.cancer += 1;
-    scores.health += 1;
-    matchedReasons.push("중대질환 대비 필요도 상승");
-  }
-
-  const categoryNameMap = {
-    health: "건강종합",
-    cancer: "암",
-    driver: "운전자",
-    accident: "상해",
-    child: "자녀보험",
-    dementia: "간병/치매",
-    fire: "화재/생활보장",
-  };
-
-  const categoryEntries = Object.entries(scores)
-    .sort((a, b) => b[1] - a[1])
-    .filter(([, score]) => score > 0);
-
-  const recommendedCategories = categoryEntries.slice(0, 3).map(([key]) => key);
-  const recommendedCategoryLabels = recommendedCategories.map((key) => categoryNameMap[key] || key);
-  const primaryCategory = recommendedCategories[0] || "health";
-  const comparisonItems = comparisonTemplates[primaryCategory] || comparisonTemplates.health;
-
-  const scoredProducts = productCatalog
-    .filter((p) => recommendedCategories.includes(p.category))
-    .map((p) => {
-      let score = 0;
-      if (p.target.includes(ageGroup)) score += 2;
-      if (form.driving === "예" && p.category === "driver") score += 3;
-      if (form.hasChildren === "있음" && p.category === "child") score += 3;
-      if (form.maritalStatus === "기혼" && ["health", "fire", "child"].includes(p.category)) score += 1;
-      if (budget && budget >= p.minBudget && budget <= p.maxBudget) score += 4;
-      if (budget && budget < p.minBudget) score -= 2;
-      if (budget && budget > p.maxBudget) score += 1;
-      if (p.category === primaryCategory) score += 2;
-      score += (p.strengths?.length || 0) * 0.4;
-      return { ...p, score };
-    })
-    .sort((a, b) => b.score - a.score);
-
-  const recommendedInsurerProducts = [];
-  const usedInsurers = new Set();
-
-  for (const item of scoredProducts) {
-    if (!usedInsurers.has(item.insurerId)) {
-      usedInsurers.add(item.insurerId);
-      recommendedInsurerProducts.push(item);
-    }
-    if (recommendedInsurerProducts.length >= 3) break;
-  }
-
-  const insurerCompareRows = recommendedInsurerProducts.map((product) => {
-    const company = insurerById(product.insurerId);
-    return {
-      insurerId: product.insurerId,
-      insurerName: company?.name || product.insurerId,
-      insurerLogo: company?.logo || "",
-      insurerColor: company?.color || "#0f172a",
-      productName: product.productName,
-      note: company?.note || "",
-      features: comparisonItems.reduce((acc, item) => {
-        const matched = Object.entries(product.features || {}).find(
-          ([key]) => normalizeFeatureLabel(key) === normalizeFeatureLabel(item)
-        );
-        acc[item] = matched?.[1] || "-";
-        return acc;
-      }, {}),
-    };
-  });
-
-  if (budget) {
-    if (budget < 30000) {
-      budgetSuggestions.push("예산이 낮아 핵심담보 우선형 설계가 적합합니다.");
-      budgetSuggestions.push("운전자/화재/상해 등 단독 실속형 제안이 유리합니다.");
-    } else if (budget < 70000) {
-      budgetSuggestions.push("1순위 부족담보 중심으로 1~2개 상품군 압축 제안이 적합합니다.");
-    } else if (budget < 120000) {
-      budgetSuggestions.push("건강종합 + 암 또는 건강종합 + 운전자 조합 제안이 적합합니다.");
-    } else {
-      budgetSuggestions.push("종합보장형 설계와 부족담보 보완을 함께 제안하기 좋습니다.");
-      budgetSuggestions.push("비교표 중심 상담으로 원수사별 강점을 명확히 보여주기 좋습니다.");
-    }
-  } else {
-    budgetSuggestions.push("예산 미입력 상태이므로 핵심담보 우선순위부터 상담하는 것이 좋습니다.");
-  }
-
-  if (recommendedCategories.includes("health")) {
-    consultPoints.push("실손 유무와 함께 암/뇌/심장 진단비 및 수술비 밸런스를 점검하세요.");
-  }
-  if (recommendedCategories.includes("cancer")) {
-    consultPoints.push("암 진단비만이 아니라 항암/표적항암/재진단암 연결 구조를 보여주세요.");
-  }
-  if (recommendedCategories.includes("driver")) {
-    consultPoints.push("운전자보험은 처리지원금, 변호사선임비, 벌금 구조를 중심으로 설명하세요.");
-  }
-  if (recommendedCategories.includes("child")) {
-    consultPoints.push("부모는 질병·상해·성장기 위험을 한 번에 정리해주는 설계를 선호합니다.");
-  }
-  if (recommendedCategories.includes("dementia")) {
-    consultPoints.push("치매진단비보다 실제 간병비 흐름과 재가/시설 활용성을 같이 설명하세요.");
-  }
-  if (recommendedCategories.includes("fire")) {
-    consultPoints.push("화재/누수/배상책임은 생활밀착형 보장으로 체감도가 높습니다.");
-  }
-  if (recommendedCategories.includes("accident")) {
-    consultPoints.push("직업/생활패턴에 따른 상해빈도 차이를 먼저 공감해주는 접근이 좋습니다.");
-  }
-
-  const safeGaps = gaps.length ? gaps : ["기존 보장 범위/금액 재점검 권장"];
-
-  const script = [
-    `${form.customerName || "고객"}님 기준으로 현재 가장 먼저 점검할 부분은 ${safeGaps.slice(0, 2).join(", ")} 입니다.`,
-    `상담 목적과 예산을 반영했을 때 ${recommendedCategoryLabels.join(", ")} 중심으로 설계 방향을 잡는 것이 적합합니다.`,
-    recommendedInsurerProducts.length
-      ? `원수사는 ${recommendedInsurerProducts.map((x) => insurerById(x.insurerId)?.name).join(", ")} 순으로 비교 제안드리면 좋습니다.`
-      : "",
-    budgetSuggestions[0] || "",
-  ]
+function buildSalesMent(form, product, insurerIds) {
+  const insurerNames = insurerIds
+    .map((id) => insurerMap[id]?.name)
     .filter(Boolean)
-    .join(" ");
+    .slice(0, 3)
+    .join(", ");
 
-  return {
-    ageGroup,
-    primaryCategory,
-    comparisonItems,
-    recommendedCategories,
-    recommendedCategoryLabels,
-    recommendedInsurerProducts,
-    recommendedInsurerNames: recommendedInsurerProducts.map((x) => insurerById(x.insurerId)?.name).filter(Boolean),
-    insurerCompareRows,
-    gaps: safeGaps,
-    consultPoints,
-    budgetSuggestions,
-    matchedReasons,
-    script,
-  };
+  return [
+    `현재 고객 조건에서는 ${product.name} 방향으로 접근하는 것이 가장 자연스럽습니다.`,
+    `특히 ${insurerNames} 중심 비교를 진행하면 보험료와 보장 밸런스를 설명하기 좋습니다.`,
+    `초회 상담에서는 모든 담보를 한 번에 넣기보다, 부족 담보 우선 보완 → 추가 특약 확장 순서로 제안하는 것이 효율적입니다.`,
+  ];
 }
 
-function buildConsultReportHtml(record, recommendation) {
-  const gapItems = (recommendation.gaps || []).map((x) => `<li>${x}</li>`).join("");
-  const pointItems = (recommendation.consultPoints || []).map((x) => `<li>${x}</li>`).join("");
-  const budgetItems = (recommendation.budgetSuggestions || []).map((x) => `<li>${x}</li>`).join("");
-  const compareHead = (recommendation.comparisonItems || []).map((item) => `<th>${item}</th>`).join("");
-  const compareBody = (recommendation.insurerCompareRows || [])
-    .map(
-      (row) => `
-        <tr>
-          <td>
-            <div style="font-weight:700;">${row.insurerName}</div>
-            <div style="font-size:12px;color:#64748b;">${row.productName}</div>
-          </td>
-          ${(recommendation.comparisonItems || [])
-            .map((item) => `<td>${row.features?.[item] || "-"}</td>`)
-            .join("")}
-        </tr>
-      `
-    )
-    .join("");
+function LogoImage({ insurer }) {
+  const [srcIndex, setSrcIndex] = useState(0);
+  const logos = insurer?.possibleLogos || [];
+  const currentSrc = logos[srcIndex];
 
-  return `
-  <html>
-    <head>
-      <meta charset="utf-8" />
-      <title>유어즈에셋 상담 리포트</title>
-      <style>
-        body {
-          font-family: Arial, "Noto Sans KR", sans-serif;
-          color: #0f172a;
-          padding: 28px;
-          background: #ffffff;
-        }
-        .top {
-          display:flex;
-          justify-content:space-between;
-          align-items:center;
-          border-bottom:2px solid #dbeafe;
-          padding-bottom:14px;
-          margin-bottom:22px;
-        }
-        .title {
-          font-size:28px;
-          font-weight:800;
-        }
-        .sub {
-          font-size:13px;
-          color:#64748b;
-          margin-top:6px;
-        }
-        .logo {
-          height:44px;
-          object-fit:contain;
-        }
-        .grid {
-          display:grid;
-          grid-template-columns:1fr 1fr;
-          gap:14px;
-          margin-bottom:16px;
-        }
-        .card {
-          border:1px solid #e2e8f0;
-          border-radius:14px;
-          padding:16px;
-          background:#fff;
-        }
-        .card h3 {
-          margin:0 0 12px;
-          font-size:16px;
-        }
-        .kv {
-          display:grid;
-          grid-template-columns:110px 1fr;
-          row-gap:8px;
-          column-gap:10px;
-          font-size:14px;
-        }
-        .kv div:nth-child(odd) {
-          color:#64748b;
-        }
-        .section {
-          margin-top:16px;
-        }
-        ul {
-          margin:0;
-          padding-left:18px;
-        }
-        li {
-          margin:5px 0;
-          line-height:1.5;
-        }
-        .script, .memo {
-          white-space:pre-wrap;
-          line-height:1.7;
-          background:#f8fafc;
-          border:1px solid #e2e8f0;
-          border-radius:12px;
-          padding:14px;
-        }
-        table {
-          width:100%;
-          border-collapse:collapse;
-          font-size:13px;
-          margin-top:10px;
-        }
-        th, td {
-          border:1px solid #e2e8f0;
-          padding:10px;
-          text-align:center;
-        }
-        th {
-          background:#eff6ff;
-        }
-        .badge {
-          display:inline-block;
-          padding:6px 10px;
-          border-radius:999px;
-          background:#eff6ff;
-          border:1px solid #dbeafe;
-          font-size:12px;
-          font-weight:700;
-        }
-        @media print {
-          body { padding: 14px; }
-          .card, table, tr, td, th { break-inside: avoid; }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="top">
-        <div>
-          <div class="title">유어즈에셋 상담 요약 리포트</div>
-          <div class="sub">출력일 ${todayString()}</div>
-        </div>
-        <img src="/logo.png" class="logo" />
+  if (!currentSrc) {
+    return (
+      <div className="logo-fallback">
+        <span>{insurer?.shortName || insurer?.name?.slice(0, 2) || "로고"}</span>
       </div>
-
-      <div class="grid">
-        <div class="card">
-          <h3>고객 기본정보</h3>
-          <div class="kv">
-            <div>고객명</div><div>${record.customerName || "-"}</div>
-            <div>성별 / 나이</div><div>${record.gender || "-"} / ${record.age || "-"}</div>
-            <div>직업</div><div>${record.job || "-"}</div>
-            <div>결혼 / 자녀</div><div>${record.maritalStatus || "-"} / ${record.hasChildren || "-"}</div>
-            <div>운전 여부</div><div>${record.driving || "-"}</div>
-            <div>상담 목적</div><div>${record.consultationPurpose || "-"}</div>
-            <div>월 예산</div><div>${record.budget ? `${formatNumber(record.budget)}원` : "-"}</div>
-            <div>진행상태</div><div><span class="badge">${record.status || "-"}</span></div>
-          </div>
-        </div>
-
-        <div class="card">
-          <h3>상담 일정 / 추천 요약</h3>
-          <div class="kv">
-            <div>상담일자</div><div>${record.consultDate || "-"}</div>
-            <div>다음 연락일</div><div>${record.nextContactDate || "-"}</div>
-            <div>관심 보장</div><div>${(record.interests || []).join(", ") || "-"}</div>
-            <div>추천 상품군</div><div>${(recommendation.recommendedCategoryLabels || []).join(", ") || "-"}</div>
-            <div>추천 원수사</div><div>${(recommendation.recommendedInsurerNames || []).join(", ") || "-"}</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card section">
-        <h3>부족 담보</h3>
-        <ul>${gapItems || "<li>없음</li>"}</ul>
-      </div>
-
-      <div class="card section">
-        <h3>상담 포인트</h3>
-        <ul>${pointItems || "<li>없음</li>"}</ul>
-      </div>
-
-      <div class="card section">
-        <h3>예산 맞춤 제안</h3>
-        <ul>${budgetItems || "<li>없음</li>"}</ul>
-      </div>
-
-      <div class="card section">
-        <h3>자동 상담 멘트</h3>
-        <div class="script">${recommendation.script || "-"}</div>
-      </div>
-
-      <div class="card section">
-        <h3>원수사 비교표</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>원수사 / 상품</th>
-              ${compareHead}
-            </tr>
-          </thead>
-          <tbody>
-            ${compareBody || `<tr><td colspan="${(recommendation.comparisonItems || []).length + 1}">비교 데이터 없음</td></tr>`}
-          </tbody>
-        </table>
-      </div>
-
-      <div class="card section">
-        <h3>상담 메모</h3>
-        <div class="memo">${record.memo || "메모 없음"}</div>
-      </div>
-    </body>
-  </html>
-  `;
-}
-
-function printConsultReport(record, recommendation) {
-  const printWindow = window.open("", "_blank", "width=1200,height=900");
-  if (!printWindow) {
-    alert("팝업이 차단되어 있습니다. 팝업 허용 후 다시 시도해주세요.");
-    return;
+    );
   }
 
-  printWindow.document.open();
-  printWindow.document.write(buildConsultReportHtml(record, recommendation));
-  printWindow.document.close();
-  printWindow.focus();
-
-  setTimeout(() => {
-    printWindow.print();
-  }, 500);
+  return (
+    <img
+      src={currentSrc}
+      alt={insurer.name}
+      className="insurer-logo"
+      onError={() => {
+        if (srcIndex < logos.length - 1) setSrcIndex(srcIndex + 1);
+      }}
+    />
+  );
 }
 
-export default function App() {
-  const [form, setForm] = useState(DEFAULT_FORM);
-  const [records, setRecords] = useState([]);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("전체");
-  const [editingId, setEditingId] = useState(null);
+function App() {
+  const [form, setForm] = useState(initialForm);
+  const [savedCustomers, setSavedCustomers] = useState([]);
+  const [selectedSavedId, setSelectedSavedId] = useState(null);
+  const reportRef = useRef(null);
 
   useEffect(() => {
-    setRecords(loadCustomers());
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        setSavedCustomers(JSON.parse(saved));
+      } catch (e) {
+        console.error(e);
+      }
+    }
   }, []);
 
   useEffect(() => {
-    saveCustomers(records);
-  }, [records]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(savedCustomers));
+  }, [savedCustomers]);
 
-  const recommendations = useMemo(() => deriveRecommendations(form), [form]);
+  const recommendedProducts = useMemo(() => getTopProducts(form), [form]);
+  const topProduct = recommendedProducts[0];
+  const missingCoverages = useMemo(() => getMissingCoverages(form), [form]);
+  const topInsurers = useMemo(() => {
+    if (!topProduct) return [];
+    return topProduct.recommendedInsurers.map((id) => insurerMap[id]).filter(Boolean);
+  }, [topProduct]);
 
-  const filteredRecords = useMemo(() => {
-    return [...records]
-      .filter((item) => {
-        const keyword = search.trim().toLowerCase();
-        const matchedKeyword =
-          !keyword ||
-          item.customerName?.toLowerCase().includes(keyword) ||
-          item.job?.toLowerCase().includes(keyword) ||
-          item.consultationPurpose?.toLowerCase().includes(keyword) ||
-          item.memo?.toLowerCase().includes(keyword);
+  const consultSummary = useMemo(
+    () => buildConsultSummary(form, topProduct, missingCoverages),
+    [form, topProduct, missingCoverages]
+  );
 
-        const matchedStatus = statusFilter === "전체" || item.status === statusFilter;
-        return matchedKeyword && matchedStatus;
-      })
-      .sort((a, b) => new Date(b.lastModifiedAt || b.createdAt || 0) - new Date(a.lastModifiedAt || a.createdAt || 0));
-  }, [records, search, statusFilter]);
+  const salesMent = useMemo(
+    () => buildSalesMent(form, topProduct || {}, topProduct?.recommendedInsurers || []),
+    [form, topProduct]
+  );
 
-  function updateField(key, value) {
+  const selectedSavedCustomer = useMemo(
+    () => savedCustomers.find((item) => item.id === selectedSavedId) || null,
+    [savedCustomers, selectedSavedId]
+  );
+
+  const updateForm = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
-  }
+  };
 
-  function toggleInterest(value) {
-    setForm((prev) => ({
-      ...prev,
-      interests: prev.interests.includes(value)
-        ? prev.interests.filter((x) => x !== value)
-        : [...prev.interests, value],
-    }));
-  }
-
-  function toggleCoverage(key) {
-    setForm((prev) => ({
-      ...prev,
-      existingCoverage: {
-        ...prev.existingCoverage,
-        [key]: !prev.existingCoverage[key],
-      },
-    }));
-  }
-
-  function resetForm() {
-    setForm({
-      ...DEFAULT_FORM,
-      consultDate: todayString(),
+  const toggleNeed = (value) => {
+    setForm((prev) => {
+      const exists = prev.needs.includes(value);
+      return {
+        ...prev,
+        needs: exists ? prev.needs.filter((item) => item !== value) : [...prev.needs, value],
+      };
     });
-    setEditingId(null);
-  }
+  };
 
-  function saveRecord() {
-    if (!form.customerName.trim()) {
-      alert("고객명을 입력해주세요.");
-      return;
-    }
-
-    const duplicate = records.find(
-      (item) => item.customerName.trim() === form.customerName.trim() && item.id !== editingId
-    );
-
-    if (duplicate && !editingId) {
-      const shouldEdit = window.confirm("같은 고객명이 이미 저장되어 있습니다.\n기존 저장건을 수정하시겠습니까?");
-      if (!shouldEdit) return;
-
-      const updated = {
-        ...duplicate,
-        ...form,
-        id: duplicate.id,
-        createdAt: duplicate.createdAt || nowISOString(),
-        lastModifiedAt: nowISOString(),
+  const toggleCoverage = (value) => {
+    setForm((prev) => {
+      const exists = prev.currentCoverages.includes(value);
+      return {
+        ...prev,
+        currentCoverages: exists
+          ? prev.currentCoverages.filter((item) => item !== value)
+          : [...prev.currentCoverages, value],
       };
+    });
+  };
 
-      setRecords((prev) => prev.map((item) => (item.id === duplicate.id ? updated : item)));
-      setForm(updated);
-      setEditingId(duplicate.id);
-      alert("기존 고객 저장건을 수정했습니다.");
-      return;
-    }
-
-    if (editingId) {
-      const updated = {
-        ...form,
-        id: editingId,
-        createdAt: form.createdAt || nowISOString(),
-        lastModifiedAt: nowISOString(),
-      };
-      setRecords((prev) => prev.map((item) => (item.id === editingId ? updated : item)));
-      setForm(updated);
-      alert("저장건을 수정했습니다.");
-      return;
-    }
-
-    const newRecord = {
-      ...form,
-      id: uid(),
-      createdAt: nowISOString(),
-      lastModifiedAt: nowISOString(),
+  const handleSaveCustomer = () => {
+    const payload = {
+      id: Date.now(),
+      savedAt: new Date().toISOString(),
+      form,
+      recommendedProducts,
+      missingCoverages,
+      consultSummary,
+      salesMent,
     };
 
-    setRecords((prev) => [newRecord, ...prev]);
-    setForm(newRecord);
-    setEditingId(newRecord.id);
-    alert("상담결과를 저장했습니다.");
-  }
+    setSavedCustomers((prev) => [payload, ...prev]);
+    setSelectedSavedId(payload.id);
+    alert("고객 정보가 저장되었습니다.");
+  };
 
-  function loadRecord(record) {
-    setForm({
-      ...DEFAULT_FORM,
-      ...record,
-      interests: Array.isArray(record.interests) ? record.interests : [],
-      existingCoverage: {
-        ...DEFAULT_FORM.existingCoverage,
-        ...(record.existingCoverage || {}),
-      },
-    });
-    setEditingId(record.id);
+  const handleDeleteCustomer = (id) => {
+    const next = savedCustomers.filter((item) => item.id !== id);
+    setSavedCustomers(next);
+    if (selectedSavedId === id) setSelectedSavedId(null);
+  };
+
+  const handleLoadCustomer = (customer) => {
+    setForm(customer.form);
+    setSelectedSavedId(customer.id);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }
+  };
 
-  function deleteRecord(id) {
-    const ok = window.confirm("이 저장건을 삭제하시겠습니까?");
-    if (!ok) return;
-    setRecords((prev) => prev.filter((item) => item.id !== id));
-    if (editingId === id) resetForm();
-  }
+  const handlePdfDownload = async () => {
+    if (!reportRef.current) return;
 
-  const completedCount = records.filter((x) => x.status === "계약완료").length;
-  const progressingCount = records.filter((x) => x.status === "상담중").length;
+    const canvas = await html2canvas(reportRef.current, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: "#f4f7fb",
+    });
+
+    const imgData = canvas.toDataURL("image/png");
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pageWidth = 210;
+    const pageHeight = 297;
+    const margin = 8;
+    const imgWidth = pageWidth - margin * 2;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    let heightLeft = imgHeight;
+    let position = margin;
+
+    pdf.addImage(imgData, "PNG", margin, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight - margin * 2;
+
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight + margin;
+      pdf.addPage();
+      pdf.addImage(imgData, "PNG", margin, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight - margin * 2;
+    }
+
+    pdf.save(`유어즈에셋_상담리포트_${form.customerName || "고객"}.pdf`);
+  };
 
   return (
-    <div className="ya-wrap">
+    <>
       <style>{`
         * { box-sizing: border-box; }
-        body { margin: 0; background: #f5f7fb; color: #0f172a; font-family: "Noto Sans KR", Arial, sans-serif; }
-        .ya-wrap {
+        body {
+          margin: 0;
+          background: linear-gradient(180deg, #eef3f8 0%, #f8fbff 100%);
+          color: #183049;
+          font-family: "Noto Sans KR", Arial, sans-serif;
+        }
+        .page {
           min-height: 100vh;
-          background:
-            radial-gradient(circle at top right, rgba(29, 78, 216, 0.08), transparent 26%),
-            linear-gradient(180deg, #f8fbff 0%, #f5f7fb 100%);
+          padding: 24px;
+        }
+        .shell {
+          max-width: 1400px;
+          margin: 0 auto;
+        }
+        .hero {
+          background: linear-gradient(135deg, #14314a 0%, #1f4d73 55%, #4d87b8 100%);
+          color: white;
+          border-radius: 24px;
+          padding: 28px;
+          box-shadow: 0 20px 40px rgba(20, 49, 74, 0.18);
+          margin-bottom: 20px;
+        }
+        .hero-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          flex-wrap: wrap;
+        }
+        .logo-wrap {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+        .brand-logo {
+          width: 54px;
+          height: 54px;
+          border-radius: 14px;
+          object-fit: contain;
+          background: rgba(255,255,255,0.12);
+          padding: 8px;
+        }
+        .hero-title {
+          font-size: 30px;
+          font-weight: 800;
+          letter-spacing: -0.02em;
+          margin: 0;
+        }
+        .hero-sub {
+          margin-top: 8px;
+          color: rgba(255,255,255,0.88);
+          font-size: 15px;
+          line-height: 1.6;
+        }
+        .top-actions {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+        .btn {
+          border: none;
+          border-radius: 14px;
+          padding: 12px 16px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: 0.2s ease;
+        }
+        .btn:hover { transform: translateY(-1px); }
+        .btn-primary {
+          background: white;
+          color: #14314a;
+        }
+        .btn-accent {
+          background: #1d6aa8;
+          color: white;
+        }
+        .btn-danger {
+          background: #d14f45;
+          color: white;
+        }
+        .btn-soft {
+          background: #eaf2f9;
+          color: #17314a;
+        }
+
+        .grid {
+          display: grid;
+          grid-template-columns: 420px 1fr 360px;
+          gap: 18px;
+          align-items: start;
+        }
+
+        .card {
+          background: rgba(255,255,255,0.92);
+          backdrop-filter: blur(6px);
+          border: 1px solid rgba(22, 62, 97, 0.08);
+          box-shadow: 0 12px 30px rgba(17, 46, 72, 0.08);
+          border-radius: 22px;
           padding: 20px;
         }
-        .container { max-width: 1500px; margin: 0 auto; }
-        .header {
-          background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #1d4ed8 100%);
-          color: white;
-          border-radius: 22px;
-          padding: 22px;
-          display:flex;
-          justify-content:space-between;
-          gap:20px;
-          align-items:center;
-          box-shadow: 0 20px 50px rgba(15,23,42,0.18);
+
+        .section-title {
+          margin: 0 0 14px 0;
+          font-size: 20px;
+          font-weight: 800;
+          color: #17314a;
         }
-        .header-left { display:flex; align-items:center; gap:16px; }
-        .logo-box {
-          width:64px; height:64px; background:rgba(255,255,255,0.12);
-          border:1px solid rgba(255,255,255,0.18);
-          border-radius:18px; display:flex; align-items:center; justify-content:center; overflow:hidden;
+
+        .section-sub {
+          margin: -6px 0 16px;
+          color: #647991;
+          font-size: 13px;
+          line-height: 1.5;
         }
-        .logo-box img { width:100%; height:100%; object-fit:contain; padding:10px; }
-        .title { font-size:28px; font-weight:900; margin-bottom:6px; }
-        .subtitle { font-size:14px; opacity:0.88; }
-        .stat-grid { display:grid; grid-template-columns: repeat(3, minmax(120px,1fr)); gap:12px; min-width: 350px; }
-        .stat-card {
-          background: rgba(255,255,255,0.12);
-          border:1px solid rgba(255,255,255,0.14);
-          border-radius:16px;
-          padding:14px;
+
+        .field {
+          margin-bottom: 14px;
         }
-        .stat-label { font-size:12px; opacity:0.86; margin-bottom:6px; }
-        .stat-value { font-size:24px; font-weight:800; }
-        .main-grid { display:grid; grid-template-columns: 1.08fr 0.92fr; gap:18px; margin-top:18px; }
-        .card {
-          background:#fff; border:1px solid #e2e8f0; border-radius:20px; padding:18px;
-          box-shadow: 0 10px 30px rgba(15,23,42,0.05);
+        .label {
+          display: block;
+          font-size: 13px;
+          font-weight: 700;
+          color: #35536e;
+          margin-bottom: 7px;
         }
-        .card-title {
-          font-size:18px; font-weight:800; margin-bottom:14px;
-          display:flex; align-items:center; justify-content:space-between; gap:12px;
+        .input, .textarea, .select {
+          width: 100%;
+          border: 1px solid #d9e4ee;
+          background: #f9fcff;
+          border-radius: 14px;
+          padding: 12px 14px;
+          color: #16304a;
+          font-size: 14px;
+          outline: none;
         }
-        .section-title { font-size:15px; font-weight:800; margin:18px 0 10px; color:#0f172a; }
-        .form-grid-3 { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:12px; }
-        .field { display:flex; flex-direction:column; gap:6px; }
-        .field label { font-size:13px; font-weight:700; color:#334155; }
-        .input, .select, .textarea {
-          width:100%;
-          border:1px solid #dbe3ef;
-          border-radius:14px;
-          background:#fff;
-          padding:12px 14px;
-          font-size:14px;
-          outline:none;
+        .textarea {
+          min-height: 90px;
+          resize: vertical;
         }
-        .input:focus, .select:focus, .textarea:focus {
-          border-color:#3b82f6;
-          box-shadow:0 0 0 4px rgba(59,130,246,0.12);
+        .chip-wrap {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
         }
-        .textarea { min-height:120px; resize:vertical; }
-        .chips { display:flex; flex-wrap:wrap; gap:8px; }
         .chip {
-          border:1px solid #dbe3ef;
-          background:#f8fafc;
-          color:#334155;
-          border-radius:999px;
-          padding:9px 12px;
-          font-size:13px;
-          font-weight:700;
-          cursor:pointer;
+          border-radius: 999px;
+          padding: 9px 12px;
+          font-size: 13px;
+          font-weight: 700;
+          border: 1px solid #d7e3ef;
+          background: white;
+          color: #34556f;
+          cursor: pointer;
         }
-        .chip.active { background:#dbeafe; color:#1d4ed8; border-color:#93c5fd; }
-        .badge {
-          display:inline-flex;
-          align-items:center;
-          gap:6px;
-          padding:7px 11px;
-          border-radius:999px;
-          font-size:12px;
-          font-weight:800;
-          color:#0f172a;
-          background:#eff6ff;
-          border:1px solid #dbeafe;
+        .chip.active {
+          background: #183c5d;
+          color: white;
+          border-color: #183c5d;
         }
-        .status-badge {
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-          min-width:74px;
-          padding:7px 10px;
-          border-radius:999px;
-          font-size:12px;
-          font-weight:800;
-          color:#fff;
+
+        .result-top {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 12px;
+          margin-bottom: 14px;
         }
-        .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
-        .btn {
-          border:none;
-          border-radius:14px;
-          padding:12px 16px;
-          font-size:14px;
-          font-weight:800;
-          cursor:pointer;
+        .mini-stat {
+          background: linear-gradient(180deg, #f8fbff 0%, #eef5fb 100%);
+          border: 1px solid #dce7f1;
+          border-radius: 18px;
+          padding: 14px;
         }
-        .btn-primary { background:linear-gradient(135deg, #1d4ed8, #2563eb); color:#fff; }
-        .btn-dark { background:#0f172a; color:#fff; }
-        .btn-soft { background:#eff6ff; color:#1d4ed8; }
-        .summary-grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:14px; }
-        .summary-box {
-          border:1px solid #e2e8f0;
-          border-radius:18px;
-          padding:14px;
-          background:linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        .mini-stat .k {
+          color: #67809a;
+          font-size: 12px;
+          font-weight: 700;
         }
-        .summary-box h4 { margin:0 0 10px; font-size:14px; }
-        .summary-box ul { margin:0; padding-left:18px; }
-        .summary-box li { margin:6px 0; font-size:14px; color:#334155; }
-        .table-wrap { overflow:auto; border:1px solid #e2e8f0; border-radius:18px; }
-        table { width:100%; border-collapse:collapse; min-width:900px; }
-        th, td { padding:12px 10px; border-bottom:1px solid #eef2f7; text-align:center; font-size:13px; }
-        th { background:#eff6ff; color:#1e3a8a; font-weight:800; }
-        .list-toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:14px; }
-        .list { display:grid; gap:12px; max-height:920px; overflow:auto; padding-right:4px; }
-        .customer-item {
-          border:1px solid #e2e8f0;
-          border-radius:18px;
-          padding:14px;
-          background:#fff;
+        .mini-stat .v {
+          margin-top: 6px;
+          font-size: 19px;
+          font-weight: 800;
+          color: #17314a;
         }
-        .customer-name { font-size:17px; font-weight:800; margin-bottom:4px; }
-        .customer-meta { font-size:13px; color:#64748b; line-height:1.6; }
-        .customer-tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
-        .highlight-complete {
-          border:2px solid rgba(22,163,74,0.22);
-          background:linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
+
+        .product-card {
+          border: 1px solid #dce7f1;
+          border-radius: 20px;
+          padding: 16px;
+          margin-bottom: 14px;
+          background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
         }
-        .highlight-progress {
-          border:2px solid rgba(245,158,11,0.20);
-          background:linear-gradient(180deg, #ffffff 0%, #fffaf0 100%);
+        .product-header {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          flex-wrap: wrap;
+          align-items: center;
         }
-        .small-actions { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
-        .tiny-btn {
-          border:none;
-          border-radius:12px;
-          padding:8px 10px;
-          font-size:12px;
-          font-weight:800;
-          cursor:pointer;
+        .product-name {
+          font-size: 20px;
+          font-weight: 800;
+          color: #17314a;
+          margin: 0;
         }
-        .tiny-soft { background:#eff6ff; color:#1d4ed8; }
-        .tiny-danger { background:#fef2f2; color:#dc2626; }
-        .inline-grid { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:10px; }
-        .kpi-card {
-          border:1px solid #e2e8f0;
-          border-radius:16px;
-          padding:12px;
-          background:#fff;
+        .score-badge {
+          background: #153b5b;
+          color: white;
+          padding: 8px 12px;
+          border-radius: 999px;
+          font-weight: 800;
+          font-size: 13px;
         }
-        .kpi-label { font-size:12px; color:#64748b; margin-bottom:6px; }
-        .kpi-value { font-size:20px; font-weight:800; }
-        .recommend-head { display:flex; flex-wrap:wrap; gap:8px; }
-        .company-cell { display:flex; align-items:center; gap:10px; justify-content:flex-start; min-width:170px; }
-        .company-logo {
-          width:34px; height:34px; border-radius:10px; border:1px solid #e2e8f0;
-          object-fit:contain; background:#fff; padding:4px;
+        .tag-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin: 12px 0;
         }
-        .script-box {
-          white-space:pre-wrap;
-          line-height:1.8;
-          background:#f8fafc;
-          border:1px solid #e2e8f0;
-          border-radius:16px;
-          padding:14px;
-          font-size:14px;
+        .tag {
+          font-size: 12px;
+          padding: 7px 10px;
+          border-radius: 999px;
+          background: #edf4fb;
+          color: #35536e;
+          font-weight: 700;
         }
-        .muted { color:#64748b; font-size:13px; }
-        .empty {
-          padding:24px;
-          text-align:center;
-          color:#64748b;
-          border:1px dashed #cbd5e1;
-          border-radius:18px;
-          background:#fafcff;
+        .bullet {
+          margin: 0;
+          padding-left: 18px;
+          line-height: 1.7;
+          color: #2f4d66;
+          font-size: 14px;
         }
+
+        .compare-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 12px;
+          margin-top: 14px;
+        }
+
+        .insurer-card {
+          border: 1px solid #dbe7f1;
+          border-radius: 18px;
+          padding: 16px;
+          background: #fff;
+        }
+        .insurer-head {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+        .insurer-logo {
+          width: 54px;
+          height: 54px;
+          object-fit: contain;
+          border-radius: 14px;
+          border: 1px solid #e1e9f2;
+          background: white;
+          padding: 6px;
+        }
+        .logo-fallback {
+          width: 54px;
+          height: 54px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 14px;
+          background: linear-gradient(135deg, #17314a, #4f84b4);
+          color: white;
+          font-weight: 800;
+          font-size: 14px;
+        }
+        .insurer-name {
+          font-size: 17px;
+          font-weight: 800;
+          color: #17314a;
+          margin: 0;
+        }
+        .insurer-type {
+          margin-top: 4px;
+          color: #6b8197;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .practical-box {
+          background: linear-gradient(180deg, #153b5b 0%, #214c72 100%);
+          color: white;
+          border-radius: 20px;
+          padding: 18px;
+          margin-top: 16px;
+        }
+        .practical-title {
+          font-size: 18px;
+          font-weight: 800;
+          margin: 0 0 10px 0;
+        }
+        .practical-list {
+          margin: 0;
+          padding-left: 18px;
+          line-height: 1.8;
+          color: rgba(255,255,255,0.92);
+          font-size: 14px;
+        }
+
+        .saved-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          max-height: 580px;
+          overflow: auto;
+          padding-right: 4px;
+        }
+        .saved-item {
+          border: 1px solid #dbe7f1;
+          border-radius: 18px;
+          padding: 14px;
+          background: white;
+          cursor: pointer;
+        }
+        .saved-item.active {
+          border-color: #1a517c;
+          box-shadow: 0 10px 24px rgba(26, 81, 124, 0.12);
+        }
+        .saved-item-top {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          align-items: center;
+        }
+        .saved-name {
+          font-size: 16px;
+          font-weight: 800;
+          margin: 0;
+          color: #17314a;
+        }
+        .saved-sub {
+          margin-top: 6px;
+          color: #647991;
+          font-size: 13px;
+          line-height: 1.5;
+        }
+
+        .detail-panel {
+          margin-top: 16px;
+          border-top: 1px dashed #d8e3ee;
+          padding-top: 16px;
+        }
+
+        .detail-block {
+          border: 1px solid #dce7f1;
+          border-radius: 16px;
+          padding: 14px;
+          background: #fbfdff;
+          margin-bottom: 10px;
+        }
+        .detail-block h4 {
+          margin: 0 0 10px 0;
+          font-size: 14px;
+          color: #17314a;
+        }
+        .detail-text {
+          color: #35536e;
+          font-size: 14px;
+          line-height: 1.7;
+          white-space: pre-wrap;
+        }
+
+        .report {
+          margin-top: 20px;
+          background: #f4f7fb;
+          border-radius: 24px;
+          padding: 18px;
+          border: 1px solid #dae5ef;
+        }
+        .report-sheet {
+          background: white;
+          border-radius: 24px;
+          overflow: hidden;
+          box-shadow: 0 16px 40px rgba(21, 55, 85, 0.12);
+        }
+        .report-cover {
+          background: linear-gradient(135deg, #14314a 0%, #23527a 55%, #88b8df 100%);
+          color: white;
+          padding: 28px;
+        }
+        .report-cover-title {
+          font-size: 30px;
+          font-weight: 900;
+          margin: 0;
+        }
+        .report-cover-sub {
+          margin-top: 10px;
+          font-size: 14px;
+          line-height: 1.7;
+          color: rgba(255,255,255,0.9);
+        }
+        .report-meta {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 10px;
+          margin-top: 18px;
+        }
+        .report-meta-card {
+          background: rgba(255,255,255,0.12);
+          border: 1px solid rgba(255,255,255,0.18);
+          border-radius: 16px;
+          padding: 12px;
+        }
+        .report-meta-card .k {
+          font-size: 11px;
+          color: rgba(255,255,255,0.76);
+          font-weight: 700;
+        }
+        .report-meta-card .v {
+          margin-top: 6px;
+          font-size: 16px;
+          font-weight: 800;
+        }
+        .report-body {
+          padding: 24px;
+        }
+        .report-section {
+          margin-bottom: 18px;
+          border: 1px solid #e0e9f1;
+          border-radius: 20px;
+          overflow: hidden;
+        }
+        .report-section-head {
+          background: #eef5fb;
+          padding: 14px 18px;
+          font-size: 16px;
+          font-weight: 800;
+          color: #17314a;
+        }
+        .report-section-body {
+          padding: 18px;
+        }
+        .report-highlight {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 12px;
+        }
+        .highlight-card {
+          border: 1px solid #dce7f1;
+          border-radius: 16px;
+          padding: 14px;
+          background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        }
+        .highlight-card .k {
+          color: #6a8097;
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .highlight-card .v {
+          margin-top: 6px;
+          font-weight: 900;
+          color: #17314a;
+          font-size: 18px;
+        }
+        .report-grid-two {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 14px;
+        }
+        .foot-note {
+          margin-top: 18px;
+          font-size: 12px;
+          color: #72879b;
+          line-height: 1.7;
+        }
+
         @media (max-width: 1200px) {
-          .main-grid { grid-template-columns: 1fr; }
+          .grid { grid-template-columns: 1fr; }
         }
-        @media (max-width: 760px) {
-          .ya-wrap { padding:12px; }
-          .header { flex-direction:column; align-items:flex-start; }
-          .form-grid-3, .summary-grid, .inline-grid { grid-template-columns: 1fr; }
-          .title { font-size:22px; }
-          .stat-grid { grid-template-columns: 1fr 1fr; min-width:auto; width:100%; }
+        @media (max-width: 900px) {
+          .compare-grid,
+          .report-highlight,
+          .report-grid-two,
+          .report-meta,
+          .result-top {
+            grid-template-columns: 1fr;
+          }
+          .page { padding: 14px; }
+          .hero-title { font-size: 24px; }
         }
       `}</style>
 
-      <div className="container">
-        <div className="header">
-          <div className="header-left">
-            <div className="logo-box">
-              <img src="/logo.png" alt="유어즈에셋 로고" />
-            </div>
-            <div>
-              <div className="title">유어즈에셋 설계사 포털</div>
-              <div className="subtitle">CRM · 고객추천 · 비교실 · 상담 리포트 출력</div>
+      <div className="page">
+        <div className="shell">
+          <div className="hero">
+            <div className="hero-top">
+              <div>
+                <div className="logo-wrap">
+                  <img src="/logo.png" alt="유어즈에셋 로고" className="brand-logo" />
+                  <div>
+                    <h1 className="hero-title">유어즈에셋 설계사 포털</h1>
+                    <div className="hero-sub">
+                      고객 입력 → 추천 상품군 → 원수사 비교 → 부족 담보 분석 → 상담 리포트 출력까지
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="top-actions">
+                <button className="btn btn-soft" onClick={handleSaveCustomer}>
+                  고객 저장
+                </button>
+                <button className="btn btn-primary" onClick={handlePdfDownload}>
+                  PDF 저장
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="stat-grid">
-            <div className="stat-card">
-              <div className="stat-label">전체 고객</div>
-              <div className="stat-value">{records.length}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">상담중</div>
-              <div className="stat-value">{progressingCount}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">계약완료</div>
-              <div className="stat-value">{completedCount}</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="main-grid">
-          <div>
+          <div className="grid">
+            {/* 좌측 입력 */}
             <div className="card">
-              <div className="card-title">
-                <span>고객 입력 / 상담 관리</span>
-                <div className="badge">{editingId ? "수정 모드" : "신규 입력"}</div>
+              <h2 className="section-title">고객 정보 입력</h2>
+              <p className="section-sub">
+                실무 상담 기준으로 고객 기본 정보, 니즈, 기존 계약 상태를 빠르게 입력합니다.
+              </p>
+
+              <div className="field">
+                <label className="label">고객명</label>
+                <input
+                  className="input"
+                  value={form.customerName}
+                  onChange={(e) => updateForm("customerName", e.target.value)}
+                  placeholder="예: 김OO"
+                />
               </div>
 
-              <div className="section-title">기본 정보</div>
-              <div className="form-grid-3">
-                <div className="field">
-                  <label>고객명</label>
-                  <input className="input" value={form.customerName} onChange={(e) => updateField("customerName", e.target.value)} />
-                </div>
-                <div className="field">
-                  <label>성별</label>
-                  <select className="select" value={form.gender} onChange={(e) => updateField("gender", e.target.value)}>
-                    <option>남성</option>
-                    <option>여성</option>
-                  </select>
-                </div>
-                <div className="field">
-                  <label>나이</label>
-                  <input className="input" type="number" value={form.age} onChange={(e) => updateField("age", e.target.value)} />
-                </div>
+              <div className="field">
+                <label className="label">성별</label>
+                <select
+                  className="select"
+                  value={form.gender}
+                  onChange={(e) => updateForm("gender", e.target.value)}
+                >
+                  <option value="무관">무관</option>
+                  <option value="남성">남성</option>
+                  <option value="여성">여성</option>
+                </select>
               </div>
 
-              <div className="form-grid-3" style={{ marginTop: 12 }}>
-                <div className="field">
-                  <label>직업</label>
-                  <input className="input" value={form.job} onChange={(e) => updateField("job", e.target.value)} />
-                </div>
-                <div className="field">
-                  <label>결혼 여부</label>
-                  <select className="select" value={form.maritalStatus} onChange={(e) => updateField("maritalStatus", e.target.value)}>
-                    <option>미혼</option>
-                    <option>기혼</option>
-                  </select>
-                </div>
-                <div className="field">
-                  <label>자녀 여부</label>
-                  <select className="select" value={form.hasChildren} onChange={(e) => updateField("hasChildren", e.target.value)}>
-                    <option>없음</option>
-                    <option>있음</option>
-                  </select>
-                </div>
+              <div className="field">
+                <label className="label">연령대</label>
+                <select
+                  className="select"
+                  value={form.ageGroup}
+                  onChange={(e) => updateForm("ageGroup", e.target.value)}
+                >
+                  <option value="30대">30대</option>
+                  <option value="40대">40대</option>
+                  <option value="50대">50대</option>
+                  <option value="60대">60대</option>
+                </select>
               </div>
 
-              <div className="form-grid-3" style={{ marginTop: 12 }}>
-                <div className="field">
-                  <label>운전 여부</label>
-                  <select className="select" value={form.driving} onChange={(e) => updateField("driving", e.target.value)}>
-                    <option>아니오</option>
-                    <option>예</option>
-                  </select>
-                </div>
-                <div className="field">
-                  <label>상담 목적</label>
-                  <select className="select" value={form.consultationPurpose} onChange={(e) => updateField("consultationPurpose", e.target.value)}>
-                    {consultationPurposes.map((item) => <option key={item}>{item}</option>)}
-                  </select>
-                </div>
-                <div className="field">
-                  <label>월보험료 예산</label>
-                  <input className="input" type="number" value={form.budget} onChange={(e) => updateField("budget", e.target.value)} />
-                </div>
+              <div className="field">
+                <label className="label">직업/상황 메모</label>
+                <input
+                  className="input"
+                  value={form.occupation}
+                  onChange={(e) => updateForm("occupation", e.target.value)}
+                  placeholder="예: 사무직 / 자영업 / 주부 / 은퇴예정"
+                />
               </div>
 
-              <div className="section-title">관심 보장</div>
-              <div className="chips">
-                {interestOptions.map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    className={`chip ${form.interests.includes(item) ? "active" : ""}`}
-                    onClick={() => toggleInterest(item)}
-                  >
-                    {item}
-                  </button>
-                ))}
+              <div className="field">
+                <label className="label">월 보험료 예산</label>
+                <input
+                  className="input"
+                  type="number"
+                  value={form.monthlyBudget}
+                  onChange={(e) => updateForm("monthlyBudget", Number(e.target.value))}
+                />
               </div>
 
-              <div className="section-title">기존 계약 보장 여부</div>
-              <div className="chips">
-                {existingCoverageOptions.map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    className={`chip ${form.existingCoverage[item.key] ? "active" : ""}`}
-                    onClick={() => toggleCoverage(item.key)}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="section-title">CRM 관리</div>
-              <div className="form-grid-3">
-                <div className="field">
-                  <label>상담 진행상태</label>
-                  <select className="select" value={form.status} onChange={(e) => updateField("status", e.target.value)}>
-                    {STATUS_OPTIONS.map((status) => <option key={status.value}>{status.value}</option>)}
-                  </select>
-                </div>
-                <div className="field">
-                  <label>상담일자</label>
-                  <input className="input" type="date" value={form.consultDate} onChange={(e) => updateField("consultDate", e.target.value)} />
-                </div>
-                <div className="field">
-                  <label>다음 연락일</label>
-                  <input className="input" type="date" value={form.nextContactDate} onChange={(e) => updateField("nextContactDate", e.target.value)} />
+              <div className="field">
+                <label className="label">주요 니즈 선택</label>
+                <div className="chip-wrap">
+                  {needOptions.map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      className={`chip ${form.needs.includes(item) ? "active" : ""}`}
+                      onClick={() => toggleNeed(item)}
+                    >
+                      {item}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <div className="field" style={{ marginTop: 12 }}>
-                <label>상담 메모</label>
-                <textarea className="textarea" value={form.memo} onChange={(e) => updateField("memo", e.target.value)} />
+              <div className="field">
+                <label className="label">현재 가입된 주요 담보</label>
+                <div className="chip-wrap">
+                  {coverageOptions.map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      className={`chip ${form.currentCoverages.includes(item) ? "active" : ""}`}
+                      onClick={() => toggleCoverage(item)}
+                    >
+                      {item}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="actions">
-                <button className="btn btn-primary" onClick={saveRecord}>{editingId ? "저장건 수정" : "상담결과 저장"}</button>
-                <button className="btn btn-dark" onClick={() => printConsultReport(form, recommendations)}>PDF 저장 / 출력</button>
-                <button className="btn btn-soft" onClick={resetForm}>신규 입력 초기화</button>
+              <div className="field">
+                <label className="label">기존 계약 분석 메모</label>
+                <textarea
+                  className="textarea"
+                  value={form.currentContractsText}
+                  onChange={(e) => updateForm("currentContractsText", e.target.value)}
+                  placeholder="예: 실손만 있음 / 암진단비 부족 / 수술비 위주 / 갱신 부담 우려"
+                />
+              </div>
+
+              <div className="field">
+                <label className="label">상담 추가 메모</label>
+                <textarea
+                  className="textarea"
+                  value={form.memo}
+                  onChange={(e) => updateForm("memo", e.target.value)}
+                  placeholder="예: 배우자/자녀 상담 확장 가능성, 보험료 민감도, 갱신형 거부감 등"
+                />
               </div>
             </div>
 
-            <div className="card" style={{ marginTop: 18 }}>
-              <div className="card-title">
-                <span>자동 추천 결과</span>
-                <div className="recommend-head">
-                  {recommendations.recommendedCategoryLabels.map((item) => <span key={item} className="badge">{item}</span>)}
-                </div>
-              </div>
+            {/* 중앙 결과 */}
+            <div>
+              <div className="card">
+                <h2 className="section-title">추천 결과 / 비교실</h2>
+                <p className="section-sub">
+                  추천 상품군과 원수사 비교 포인트를 실무 상담 멘트 중심으로 정리합니다.
+                </p>
 
-              <div className="inline-grid">
-                <div className="kpi-card">
-                  <div className="kpi-label">추천 상품군</div>
-                  <div className="kpi-value">{recommendations.recommendedCategoryLabels[0] || "-"}</div>
+                <div className="result-top">
+                  <div className="mini-stat">
+                    <div className="k">추천 1순위</div>
+                    <div className="v">{topProduct?.name || "-"}</div>
+                  </div>
+                  <div className="mini-stat">
+                    <div className="k">예산</div>
+                    <div className="v">{currency(form.monthlyBudget)}원</div>
+                  </div>
+                  <div className="mini-stat">
+                    <div className="k">부족 담보</div>
+                    <div className="v">{missingCoverages.length}개</div>
+                  </div>
                 </div>
-                <div className="kpi-card">
-                  <div className="kpi-label">추천 원수사 수</div>
-                  <div className="kpi-value">{recommendations.recommendedInsurerProducts.length}</div>
-                </div>
-                <div className="kpi-card">
-                  <div className="kpi-label">부족 담보 수</div>
-                  <div className="kpi-value">{recommendations.gaps.length}</div>
-                </div>
-                <div className="kpi-card">
-                  <div className="kpi-label">기준 연령대</div>
-                  <div className="kpi-value">{recommendations.ageGroup}</div>
-                </div>
-              </div>
 
-              <div className="summary-grid" style={{ marginTop: 14 }}>
-                <div className="summary-box">
-                  <h4>부족 담보 자동 표시</h4>
-                  <ul>{recommendations.gaps.map((item, idx) => <li key={idx}>{item}</li>)}</ul>
+                {recommendedProducts.map((product, idx) => (
+                  <div key={product.id} className="product-card">
+                    <div className="product-header">
+                      <div>
+                        <h3 className="product-name">
+                          {idx + 1}. {product.name}
+                        </h3>
+                        <div className="section-sub" style={{ margin: "6px 0 0 0" }}>
+                          {product.comparisonMent}
+                        </div>
+                      </div>
+                      <div className="score-badge">적합도 {product.matchScore}점</div>
+                    </div>
+
+                    <div className="tag-row">
+                      <span className="tag">카테고리: {product.category}</span>
+                      <span className="tag">
+                        예산 범위: {currency(product.monthlyBudgetRange[0])}~{currency(product.monthlyBudgetRange[1])}원
+                      </span>
+                      {product.targetNeeds.map((item) => (
+                        <span className="tag" key={item}>{item}</span>
+                      ))}
+                    </div>
+
+                    <ul className="bullet">
+                      {product.coreStrengths.map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+
+                <div className="compare-grid">
+                  {topInsurers.map((insurer) => (
+                    <div key={insurer.id} className="insurer-card">
+                      <div className="insurer-head">
+                        <LogoImage insurer={insurer} />
+                        <div>
+                          <h4 className="insurer-name">{insurer.name}</h4>
+                          <div className="insurer-type">{insurer.type}</div>
+                        </div>
+                      </div>
+
+                      <div className="tag-row">
+                        {insurer.strengthTags.map((tag) => (
+                          <span className="tag" key={tag}>{tag}</span>
+                        ))}
+                      </div>
+
+                      <ul className="bullet">
+                        {insurer.salesPoints.map((point, idx) => (
+                          <li key={idx}>{point}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
                 </div>
-                <div className="summary-box">
-                  <h4>상담 포인트</h4>
-                  <ul>{recommendations.consultPoints.map((item, idx) => <li key={idx}>{item}</li>)}</ul>
+
+                <div className="practical-box">
+                  <h3 className="practical-title">실무 상담 포인트</h3>
+                  <ul className="practical-list">
+                    {consultSummary.map((item, idx) => (
+                      <li key={idx}>{item}</li>
+                    ))}
+                  </ul>
                 </div>
-                <div className="summary-box">
-                  <h4>예산 맞춤 제안</h4>
-                  <ul>{recommendations.budgetSuggestions.map((item, idx) => <li key={idx}>{item}</li>)}</ul>
-                </div>
-                <div className="summary-box">
-                  <h4>추천 원수사</h4>
-                  <ul>
-                    {recommendations.recommendedInsurerProducts.map((item) => {
-                      const company = insurerById(item.insurerId);
-                      return <li key={item.id}><strong>{company?.name || item.insurerId}</strong> · {item.productName}</li>;
-                    })}
+
+                <div className="practical-box" style={{ marginTop: 12 }}>
+                  <h3 className="practical-title">권장 상담 멘트 흐름</h3>
+                  <ul className="practical-list">
+                    {salesMent.map((item, idx) => (
+                      <li key={idx}>{item}</li>
+                    ))}
                   </ul>
                 </div>
               </div>
 
-              <div className="section-title">자동 상담 멘트</div>
-              <div className="script-box">{recommendations.script}</div>
-            </div>
+              {/* PDF 리포트 영역 */}
+              <div className="report" ref={reportRef}>
+                <div className="report-sheet">
+                  <div className="report-cover">
+                    <h2 className="report-cover-title">유어즈에셋 상담 리포트</h2>
+                    <div className="report-cover-sub">
+                      고객 조건 분석 / 추천 상품군 / 원수사 비교 / 부족 담보 / 상담 포인트 정리
+                    </div>
 
-            <div className="card" style={{ marginTop: 18 }}>
-              <div className="card-title">
-                <span>원수사 비교실</span>
-                <span className="muted">상품군: {recommendations.recommendedCategoryLabels[0] || "-"} / 비교 항목 자동 변경</span>
-              </div>
+                    <div className="report-meta">
+                      <div className="report-meta-card">
+                        <div className="k">고객명</div>
+                        <div className="v">{form.customerName || "미입력"}</div>
+                      </div>
+                      <div className="report-meta-card">
+                        <div className="k">연령/성별</div>
+                        <div className="v">{form.ageGroup} / {form.gender}</div>
+                      </div>
+                      <div className="report-meta-card">
+                        <div className="k">예산</div>
+                        <div className="v">{currency(form.monthlyBudget)}원</div>
+                      </div>
+                      <div className="report-meta-card">
+                        <div className="k">작성일</div>
+                        <div className="v">{getToday()}</div>
+                      </div>
+                    </div>
+                  </div>
 
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th style={{ minWidth: 220 }}>원수사 / 상품</th>
-                      {recommendations.comparisonItems.map((item) => <th key={item}>{item}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recommendations.insurerCompareRows.map((row) => (
-                      <tr key={row.insurerId}>
-                        <td style={{ textAlign: "left" }}>
-                          <div className="company-cell">
-                            <img
-                              className="company-logo"
-                              src={row.insurerLogo}
-                              alt={row.insurerName}
-                              onError={(e) => { e.currentTarget.style.display = "none"; }}
-                            />
-                            <div>
-                              <div style={{ fontWeight: 800 }}>{row.insurerName}</div>
-                              <div className="muted">{row.productName}</div>
+                  <div className="report-body">
+                    <div className="report-section">
+                      <div className="report-section-head">1. 핵심 요약</div>
+                      <div className="report-section-body">
+                        <div className="report-highlight">
+                          <div className="highlight-card">
+                            <div className="k">추천 1순위</div>
+                            <div className="v">{topProduct?.name || "-"}</div>
+                          </div>
+                          <div className="highlight-card">
+                            <div className="k">주요 니즈</div>
+                            <div className="v">{form.needs.join(", ") || "-"}</div>
+                          </div>
+                          <div className="highlight-card">
+                            <div className="k">부족 담보</div>
+                            <div className="v">
+                              {missingCoverages.length ? missingCoverages.join(", ") : "핵심 담보 기본 보유"}
                             </div>
                           </div>
-                        </td>
-                        {recommendations.comparisonItems.map((item) => <td key={item}>{row.features[item] || "-"}</td>)}
-                      </tr>
-                    ))}
-                    {recommendations.insurerCompareRows.length === 0 && (
-                      <tr>
-                        <td colSpan={recommendations.comparisonItems.length + 1}>비교 가능한 추천 원수사가 없습니다.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <div className="card">
-              <div className="card-title">
-                <span>고객 CRM 리스트</span>
-                <span className="badge">최근 저장순</span>
-              </div>
-
-              <div className="list-toolbar">
-                <input
-                  className="input"
-                  style={{ flex: 1, minWidth: 220 }}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="고객명 / 직업 / 상담목적 / 메모 검색"
-                />
-                <select className="select" style={{ width: 150 }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                  <option>전체</option>
-                  {STATUS_OPTIONS.map((item) => <option key={item.value}>{item.value}</option>)}
-                </select>
-              </div>
-
-              <div className="list">
-                {filteredRecords.length === 0 ? (
-                  <div className="empty">저장된 고객이 없습니다.</div>
-                ) : (
-                  filteredRecords.map((item) => {
-                    const rec = deriveRecommendations(item);
-                    const itemClass =
-                      item.status === "계약완료"
-                        ? "customer-item highlight-complete"
-                        : item.status === "상담중"
-                        ? "customer-item highlight-progress"
-                        : "customer-item";
-
-                    return (
-                      <div key={item.id} className={itemClass}>
-                        <div onClick={() => loadRecord(item)} style={{ cursor: "pointer" }}>
-                          <div className="customer-name">{item.customerName}</div>
-                          <div className="customer-meta">
-                            {item.gender} / {item.age || "-"}세 / {item.job || "-"}<br />
-                            상담목적: {item.consultationPurpose || "-"} · 예산: {item.budget ? `${formatNumber(item.budget)}원` : "-"}<br />
-                            상담일: {item.consultDate || "-"} · 다음연락일: {item.nextContactDate || "-"}
-                          </div>
-
-                          <div className="customer-tags">
-                            <span className="status-badge" style={{ background: statusColor(item.status) }}>{item.status}</span>
-                            {rec.recommendedCategoryLabels.slice(0, 2).map((tag) => <span key={tag} className="badge">{tag}</span>)}
-                            {rec.recommendedInsurerNames.slice(0, 1).map((tag) => <span key={tag} className="badge">{tag}</span>)}
-                          </div>
-                        </div>
-
-                        <div className="small-actions">
-                          <button className="tiny-btn tiny-soft" onClick={() => loadRecord(item)}>불러오기 / 수정</button>
-                          <button className="tiny-btn tiny-soft" onClick={() => printConsultReport(item, rec)}>PDF 출력</button>
-                          <button className="tiny-btn tiny-danger" onClick={() => deleteRecord(item.id)}>삭제</button>
                         </div>
                       </div>
-                    );
-                  })
-                )}
+                    </div>
+
+                    <div className="report-section">
+                      <div className="report-section-head">2. 기존 계약 분석 / 부족 담보</div>
+                      <div className="report-section-body">
+                        <div className="report-grid-two">
+                          <div className="detail-block">
+                            <h4>기존 계약 메모</h4>
+                            <div className="detail-text">
+                              {form.currentContractsText || "기존 계약 메모 없음"}
+                            </div>
+                          </div>
+                          <div className="detail-block">
+                            <h4>부족 담보 분석</h4>
+                            <div className="detail-text">
+                              {missingCoverages.length
+                                ? `현재 기준으로 ${missingCoverages.join(", ")} 보완 우선 검토가 필요합니다.`
+                                : "선택된 주요 담보는 기본 보유 상태로 확인됩니다."}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="report-section">
+                      <div className="report-section-head">3. 추천 상품군</div>
+                      <div className="report-section-body">
+                        {recommendedProducts.map((product, idx) => (
+                          <div key={product.id} className="detail-block">
+                            <h4>{idx + 1}. {product.name}</h4>
+                            <div className="detail-text">
+                              {product.comparisonMent}
+                              {"\n\n"}핵심 포인트:
+                              {"\n"}- {product.coreStrengths.join("\n- ")}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="report-section">
+                      <div className="report-section-head">4. 추천 원수사 비교 포인트</div>
+                      <div className="report-section-body">
+                        <div className="report-grid-two">
+                          {topInsurers.map((insurer) => (
+                            <div key={insurer.id} className="detail-block">
+                              <h4>{insurer.name}</h4>
+                              <div className="detail-text">
+                                강점 키워드: {insurer.strengthTags.join(", ")}
+                                {"\n\n"}실무 활용 포인트:
+                                {"\n"}- {insurer.salesPoints.join("\n- ")}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="report-section">
+                      <div className="report-section-head">5. 상담 진행 멘트</div>
+                      <div className="report-section-body">
+                        <div className="detail-block">
+                          <h4>상담 요약 멘트</h4>
+                          <div className="detail-text">
+                            {consultSummary.map((item) => `- ${item}`).join("\n")}
+                          </div>
+                        </div>
+                        <div className="detail-block">
+                          <h4>실전 제안 멘트</h4>
+                          <div className="detail-text">
+                            {salesMent.map((item) => `- ${item}`).join("\n")}
+                          </div>
+                        </div>
+                        <div className="detail-block">
+                          <h4>추가 메모</h4>
+                          <div className="detail-text">{form.memo || "추가 메모 없음"}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="foot-note">
+                      본 리포트는 상담 보조용 초안입니다. 실제 상품 제안 시에는 최신 상품 내용, 약관, 인수 기준,
+                      보험료 변동 여부를 반드시 재확인한 후 활용하세요.
+                    </div>
+                  </div>
+                </div>
               </div>
+            </div>
+
+            {/* 우측 저장 고객 */}
+            <div className="card">
+              <h2 className="section-title">저장 고객 상세보기</h2>
+              <p className="section-sub">
+                저장된 고객을 불러와 재상담하거나, 부족 담보/추천 결과를 바로 다시 확인할 수 있습니다.
+              </p>
+
+              <div className="saved-list">
+                {savedCustomers.length === 0 && (
+                  <div className="detail-block">
+                    <div className="detail-text">아직 저장된 고객 정보가 없습니다.</div>
+                  </div>
+                )}
+
+                {savedCustomers.map((customer) => (
+                  <div
+                    key={customer.id}
+                    className={`saved-item ${selectedSavedId === customer.id ? "active" : ""}`}
+                    onClick={() => setSelectedSavedId(customer.id)}
+                  >
+                    <div className="saved-item-top">
+                      <div>
+                        <h4 className="saved-name">{customer.form.customerName || "이름 미입력"}</h4>
+                        <div className="saved-sub">
+                          {customer.form.ageGroup} / {customer.form.gender} / 예산 {currency(customer.form.monthlyBudget)}원
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {selectedSavedCustomer && (
+                <div className="detail-panel">
+                  <div className="detail-block">
+                    <h4>기본 정보</h4>
+                    <div className="detail-text">
+                      고객명: {selectedSavedCustomer.form.customerName || "-"}
+                      {"\n"}성별: {selectedSavedCustomer.form.gender}
+                      {"\n"}연령대: {selectedSavedCustomer.form.ageGroup}
+                      {"\n"}직업/상황: {selectedSavedCustomer.form.occupation || "-"}
+                      {"\n"}예산: {currency(selectedSavedCustomer.form.monthlyBudget)}원
+                    </div>
+                  </div>
+
+                  <div className="detail-block">
+                    <h4>선택 니즈 / 현재 담보</h4>
+                    <div className="detail-text">
+                      니즈: {selectedSavedCustomer.form.needs.join(", ") || "-"}
+                      {"\n"}현재 담보: {selectedSavedCustomer.form.currentCoverages.join(", ") || "-"}
+                    </div>
+                  </div>
+
+                  <div className="detail-block">
+                    <h4>추천 결과</h4>
+                    <div className="detail-text">
+                      {selectedSavedCustomer.recommendedProducts
+                        .map((item, idx) => `${idx + 1}. ${item.name} (${item.matchScore}점)`)
+                        .join("\n")}
+                    </div>
+                  </div>
+
+                  <div className="detail-block">
+                    <h4>부족 담보 / 상담 요약</h4>
+                    <div className="detail-text">
+                      부족 담보: {selectedSavedCustomer.missingCoverages.join(", ") || "없음"}
+                      {"\n\n"}
+                      {selectedSavedCustomer.consultSummary.map((item) => `- ${item}`).join("\n")}
+                    </div>
+                  </div>
+
+                  <div className="detail-block">
+                    <h4>기존 계약 / 추가 메모</h4>
+                    <div className="detail-text">
+                      기존 계약 메모:
+                      {"\n"}{selectedSavedCustomer.form.currentContractsText || "-"}
+                      {"\n\n"}추가 메모:
+                      {"\n"}{selectedSavedCustomer.form.memo || "-"}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      className="btn btn-accent"
+                      onClick={() => handleLoadCustomer(selectedSavedCustomer)}
+                    >
+                      이 고객 불러오기
+                    </button>
+                    <button
+                      className="btn btn-danger"
+                      onClick={() => handleDeleteCustomer(selectedSavedCustomer.id)}
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
+
+export default App;
